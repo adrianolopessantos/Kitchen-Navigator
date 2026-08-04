@@ -1,0 +1,22 @@
+{
+  "colors": {
+    "background": "#071209",
+    "surface": "#121B13",
+    "primary": "#9BEA7A",
+    "warning": "#FFD75A",
+    "danger": "#FF6557",
+    "text": "#F5F7F3",
+    "muted": "#AAB5A7"
+  },
+  "spacing": {
+    "xs": 6,
+    "sm": 10,
+    "md": 16,
+    "lg": 24,
+    "xl": 32
+  },
+  "radius": {
+    "card": 20,
+    "button": 16
+  }
+}

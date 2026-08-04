@@ -1,0 +1,3 @@
+import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
+class CookingScreen extends StatelessWidget{const CookingScreen({super.key});@override Widget build(BuildContext context)=>SafeArea(child:ListView(padding:const EdgeInsets.all(16),children:[Text('Cooking',style:const TextStyle(color:AppColors.text,fontSize:28,fontWeight:FontWeight.w900)),const SizedBox(height:10),const Text('Large timers, voice guidance and Cook Together.',style:TextStyle(color:AppColors.muted)),const SizedBox(height:24),const Card(child:Padding(padding:EdgeInsets.all(24),child:Text('Version 8 module started. Real data and interactions come next.',style:TextStyle(color:AppColors.text))))]));}

@@ -1,0 +1,28 @@
+name: kitchen_navigator
+description: Kitchen Navigator 8.0 - Making Every Meal Easier
+publish_to: "none"
+version: 10.1.0+23
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  mobile_scanner: ^7.4.0
+  image_picker: ^1.2.3
+  google_mlkit_text_recognition: ^0.16.0
+  shared_preferences: ^2.5.3
+  speech_to_text: ^7.4.0
+  flutter_tts: ^4.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
