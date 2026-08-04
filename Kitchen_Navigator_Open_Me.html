@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#2f7d4a" />
+  <title>Kitchen Navigator</title>
+  <style>
+
+:root {
+  --green: #2f7d4a;
+  --green-dark: #205d36;
+  --cream: #f7f3e8;
+  --card: #ffffff;
+  --text: #1d2a22;
+  --muted: #66736b;
+  --orange: #e88938;
+  --danger: #b33b3b;
+  --border: #dfe6df;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  color: var(--text);
+  background: linear-gradient(180deg, #edf7ef, var(--cream));
+  min-height: 100vh;
+}
+
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: var(--green);
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.app-header h1 { margin: 0; font-size: 1.35rem; }
+.eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; margin: 0 0 6px; opacity: .76; font-weight: 700; }
+
+main { width: min(760px, 100%); margin: 0 auto; padding: 20px; }
+.view { display: none; }
+.view.active { display: block; }
+
+.card, .card-soft {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: 0 12px 35px rgba(36, 74, 48, .08);
+}
+.card { padding: 22px; }
+.card-soft { padding: 16px; box-shadow: none; background: #fbfdfb; }
+
+.hero { display: grid; gap: 18px; margin-bottom: 24px; }
+.hero h2 { font-size: 2rem; margin: 0 0 8px; }
+.hero p { color: var(--muted); line-height: 1.55; }
+
+.primary, .secondary, .ghost, .danger {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-weight: 700;
+}
+.primary { background: var(--green); color: white; }
+.primary:hover { background: var(--green-dark); }
+.secondary { background: var(--orange); color: white; }
+.ghost { background: #eef4ef; color: var(--green-dark); }
+.danger { background: #fde9e9; color: var(--danger); }
+.full { width: 100%; margin-top: 16px; }
+.hidden { display: none !important; }
+
+.section-heading, .toolbar, .step-row, .recipe-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-heading { margin: 18px 0 12px; }
+.section-heading h2, .section-heading h3, .toolbar h2 { margin: 0; }
+.compact { margin-top: 22px; }
+
+.recipe-list { display: grid; gap: 12px; }
+.recipe-card {
+  width: 100%;
+  text-align: left;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+}
+.recipe-card h3 { margin: 0 0 6px; }
+.recipe-card p { margin: 0; color: var(--muted); }
+.recipe-card .arrow { font-size: 1.4rem; color: var(--green); }
+.empty-state { color: var(--muted); text-align: center; padding: 32px 10px; }
+
+.toolbar { margin-bottom: 16px; }
+.form-card { display: grid; gap: 16px; }
+label { display: grid; gap: 7px; font-weight: 700; }
+input, textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 12px;
+  background: white;
+  color: var(--text);
+}
+textarea { resize: vertical; }
+#stepsEditor { display: grid; gap: 12px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+#detailIngredients, #detailSteps { padding-left: 22px; line-height: 1.7; }
+#detailSteps li { margin-bottom: 9px; }
+
+.cook-card { text-align: center; padding: 28px 22px; }
+.cook-card h2 { margin: 0 0 20px; }
+.step-number {
+  display: inline-block;
+  background: #eef6ef;
+  color: var(--green-dark);
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-weight: 800;
+}
+.instruction { font-size: 1.65rem; line-height: 1.3; margin: 28px 0; font-weight: 800; }
+.timer { font-size: clamp(3.5rem, 18vw, 6.5rem); font-variant-numeric: tabular-nums; font-weight: 900; letter-spacing: -.04em; color: var(--green-dark); }
+.timer-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.pill { background: #eef4ef; padding: 8px 12px; border-radius: 999px; font-weight: 700; }
+
+@media (min-width: 640px) {
+  .hero { grid-template-columns: 1fr auto; align-items: center; }
+}
+
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Your cooking guide</p>
+      <h1>Kitchen Navigator</h1>
+    </div>
+    <button id="installBtn" class="ghost hidden">Install</button>
+  </header>
+
+  <main>
+    <section id="homeView" class="view active">
+      <div class="hero card">
+        <div>
+          <p class="eyebrow">Cook with confidence</p>
+          <h2>One step at a time</h2>
+          <p>Create a recipe, add timed steps, then let the app guide you.</p>
+        </div>
+        <button id="newRecipeBtn" class="primary">Create recipe</button>
+      </div>
+
+      <div class="section-heading">
+        <h2>Your recipes</h2>
+        <button id="addRecipeSmallBtn" class="ghost">+ Add</button>
+      </div>
+      <div id="recipeList" class="recipe-list"></div>
+      <p id="emptyState" class="empty-state">No recipes yet. Create your first recipe.</p>
+    </section>
+
+    <section id="editorView" class="view">
+      <div class="toolbar">
+        <button class="ghost" data-back>← Back</button>
+        <h2 id="editorTitle">New recipe</h2>
+      </div>
+
+      <form id="recipeForm" class="card form-card">
+        <label>
+          Recipe name
+          <input id="recipeName" required maxlength="80" placeholder="Example: Scrambled eggs" />
+        </label>
+
+        <label>
+          Ingredients
+          <textarea id="ingredients" rows="5" placeholder="2 eggs&#10;1 tsp butter&#10;Salt"></textarea>
+        </label>
+
+        <div class="section-heading compact">
+          <h3>Cooking steps</h3>
+          <button id="addStepBtn" type="button" class="ghost">+ Step</button>
+        </div>
+
+        <div id="stepsEditor"></div>
+
+        <div class="actions">
+          <button type="submit" class="primary">Save recipe</button>
+          <button id="deleteRecipeBtn" type="button" class="danger hidden">Delete</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="detailView" class="view">
+      <div class="toolbar">
+        <button class="ghost" data-back>← Back</button>
+        <button id="editRecipeBtn" class="ghost">Edit</button>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Recipe</p>
+        <h2 id="detailName"></h2>
+        <h3>Ingredients</h3>
+        <ul id="detailIngredients"></ul>
+        <h3>Steps</h3>
+        <ol id="detailSteps"></ol>
+        <button id="startCookingBtn" class="primary full">Start cooking</button>
+      </div>
+    </section>
+
+    <section id="cookView" class="view">
+      <div class="toolbar">
+        <button id="exitCookingBtn" class="ghost">← Exit</button>
+        <span id="cookProgress" class="pill"></span>
+      </div>
+
+      <div class="cook-card card">
+        <p class="eyebrow">Now</p>
+        <h2 id="cookRecipeName"></h2>
+        <div id="stepNumber" class="step-number"></div>
+        <p id="cookInstruction" class="instruction"></p>
+        <div id="timer" class="timer">00:00</div>
+        <div class="timer-actions">
+          <button id="timerToggleBtn" class="primary">Start timer</button>
+          <button id="skipTimerBtn" class="ghost">Skip timer</button>
+        </div>
+        <button id="nextStepBtn" class="secondary full">Done — next step</button>
+      </div>
+    </section>
+  </main>
+
+  <template id="stepTemplate">
+    <div class="step-editor card-soft">
+      <div class="step-row">
+        <strong class="step-label">Step</strong>
+        <button type="button" class="remove-step ghost">Remove</button>
+      </div>
+      <label>
+        Instruction
+        <textarea class="step-instruction" rows="2" required placeholder="Add the onions"></textarea>
+      </label>
+      <label>
+        Timer in seconds
+        <input class="step-seconds" type="number" min="0" max="86400" value="0" />
+      </label>
+    </div>
+  </template>
+  <script>
+
+const STORAGE_KEY = "kitchenNavigatorRecipesV1";
+
+let recipes = loadRecipes();
+let currentRecipeId = null;
+let cookingRecipe = null;
+let cookingStepIndex = 0;
+let timerRemaining = 0;
+let timerId = null;
+let timerRunning = false;
+let deferredInstallPrompt = null;
+
+const views = [...document.querySelectorAll(".view")];
+const recipeList = document.getElementById("recipeList");
+const emptyState = document.getElementById("emptyState");
+const recipeForm = document.getElementById("recipeForm");
+const stepsEditor = document.getElementById("stepsEditor");
+const stepTemplate = document.getElementById("stepTemplate");
+
+function loadRecipes() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecipes() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
+}
+
+function showView(id) {
+  views.forEach(v => v.classList.toggle("active", v.id === id));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function formatTime(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const mins = Math.floor(safe / 60).toString().padStart(2, "0");
+  const secs = Math.floor(safe % 60).toString().padStart(2, "0");
+  return `${mins}:${secs}`;
+}
+
+function renderRecipes() {
+  recipeList.innerHTML = "";
+  emptyState.hidden = recipes.length > 0;
+
+  recipes.forEach(recipe => {
+    const button = document.createElement("button");
+    button.className = "recipe-card";
+    button.innerHTML = `
+      <div>
+        <h3>${escapeHtml(recipe.name)}</h3>
+        <p>${recipe.steps.length} step${recipe.steps.length === 1 ? "" : "s"}</p>
+      </div>
+      <span class="arrow">›</span>
+    `;
+    button.addEventListener("click", () => openRecipe(recipe.id));
+    recipeList.appendChild(button);
+  });
+}
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value ?? "";
+  return div.innerHTML;
+}
+
+function addStepEditor(step = { instruction: "", seconds: 0 }) {
+  const fragment = stepTemplate.content.cloneNode(true);
+  const card = fragment.querySelector(".step-editor");
+  card.querySelector(".step-instruction").value = step.instruction || "";
+  card.querySelector(".step-seconds").value = Number(step.seconds) || 0;
+  card.querySelector(".remove-step").addEventListener("click", () => {
+    card.remove();
+    renumberSteps();
+  });
+  stepsEditor.appendChild(fragment);
+  renumberSteps();
+}
+
+function renumberSteps() {
+  [...stepsEditor.querySelectorAll(".step-editor")].forEach((card, index) => {
+    card.querySelector(".step-label").textContent = `Step ${index + 1}`;
+  });
+}
+
+function openEditor(recipeId = null) {
+  currentRecipeId = recipeId;
+  const recipe = recipes.find(r => r.id === recipeId);
+
+  document.getElementById("editorTitle").textContent = recipe ? "Edit recipe" : "New recipe";
+  document.getElementById("recipeName").value = recipe?.name || "";
+  document.getElementById("ingredients").value = recipe?.ingredients?.join("
+") || "";
+  document.getElementById("deleteRecipeBtn").classList.toggle("hidden", !recipe);
+  stepsEditor.innerHTML = "";
+
+  (recipe?.steps?.length ? recipe.steps : [{ instruction: "", seconds: 0 }])
+    .forEach(addStepEditor);
+
+  showView("editorView");
+}
+
+function openRecipe(id) {
+  const recipe = recipes.find(r => r.id === id);
+  if (!recipe) return;
+  currentRecipeId = id;
+
+  document.getElementById("detailName").textContent = recipe.name;
+
+  const ingredientsList = document.getElementById("detailIngredients");
+  ingredientsList.innerHTML = "";
+  (recipe.ingredients.length ? recipe.ingredients : ["No ingredients listed"]).forEach(item => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    ingredientsList.appendChild(li);
+  });
+
+  const stepsList = document.getElementById("detailSteps");
+  stepsList.innerHTML = "";
+  recipe.steps.forEach(step => {
+    const li = document.createElement("li");
+    li.textContent = `${step.instruction}${step.seconds ? ` — ${formatTime(step.seconds)}` : ""}`;
+    stepsList.appendChild(li);
+  });
+
+  showView("detailView");
+}
+
+recipeForm.addEventListener("submit", event => {
+  event.preventDefault();
+
+  const name = document.getElementById("recipeName").value.trim();
+  const ingredients = document.getElementById("ingredients").value
+    .split("
+").map(v => v.trim()).filter(Boolean);
+
+  const steps = [...stepsEditor.querySelectorAll(".step-editor")].map(card => ({
+    instruction: card.querySelector(".step-instruction").value.trim(),
+    seconds: Math.max(0, Number(card.querySelector(".step-seconds").value) || 0)
+  })).filter(step => step.instruction);
+
+  if (!name || !steps.length) {
+    alert("Please add a recipe name and at least one cooking step.");
+    return;
+  }
+
+  if (currentRecipeId) {
+    const index = recipes.findIndex(r => r.id === currentRecipeId);
+    recipes[index] = { ...recipes[index], name, ingredients, steps };
+  } else {
+    currentRecipeId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    recipes.unshift({ id: currentRecipeId, name, ingredients, steps, createdAt: Date.now() });
+  }
+
+  saveRecipes();
+  renderRecipes();
+  openRecipe(currentRecipeId);
+});
+
+document.getElementById("deleteRecipeBtn").addEventListener("click", () => {
+  if (!currentRecipeId || !confirm("Delete this recipe?")) return;
+  recipes = recipes.filter(r => r.id !== currentRecipeId);
+  saveRecipes();
+  renderRecipes();
+  showView("homeView");
+});
+
+function startCooking() {
+  const recipe = recipes.find(r => r.id === currentRecipeId);
+  if (!recipe) return;
+  cookingRecipe = recipe;
+  cookingStepIndex = 0;
+  stopTimer();
+  renderCookStep();
+  showView("cookView");
+}
+
+function renderCookStep() {
+  const step = cookingRecipe.steps[cookingStepIndex];
+  document.getElementById("cookRecipeName").textContent = cookingRecipe.name;
+  document.getElementById("cookProgress").textContent =
+    `${cookingStepIndex + 1} / ${cookingRecipe.steps.length}`;
+  document.getElementById("stepNumber").textContent = `Step ${cookingStepIndex + 1}`;
+  document.getElementById("cookInstruction").textContent = step.instruction;
+
+  timerRemaining = Number(step.seconds) || 0;
+  timerRunning = false;
+  document.getElementById("timer").textContent = formatTime(timerRemaining);
+  document.getElementById("timerToggleBtn").textContent =
+    timerRemaining > 0 ? "Start timer" : "No timer";
+  document.getElementById("timerToggleBtn").disabled = timerRemaining <= 0;
+  document.getElementById("nextStepBtn").textContent =
+    cookingStepIndex === cookingRecipe.steps.length - 1
+      ? "Finish cooking"
+      : "Done — next step";
+}
+
+function toggleTimer() {
+  if (timerRemaining <= 0) return;
+
+  if (timerRunning) {
+    clearInterval(timerId);
+    timerRunning = false;
+    document.getElementById("timerToggleBtn").textContent = "Resume timer";
+    return;
+  }
+
+  timerRunning = true;
+  document.getElementById("timerToggleBtn").textContent = "Pause timer";
+  const endAt = Date.now() + timerRemaining * 1000;
+
+  timerId = setInterval(() => {
+    timerRemaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+    document.getElementById("timer").textContent = formatTime(timerRemaining);
+
+    if (timerRemaining <= 0) {
+      stopTimer();
+      notifyStepReady();
+      document.getElementById("timerToggleBtn").textContent = "Timer finished";
+    }
+  }, 250);
+}
+
+function stopTimer() {
+  if (timerId) clearInterval(timerId);
+  timerId = null;
+  timerRunning = false;
+}
+
+async function notifyStepReady() {
+  if ("vibrate" in navigator) navigator.vibrate([250, 120, 250]);
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Kitchen Navigator", {
+        body: "Timer finished. Your next cooking action is ready."
+      });
+    }
+  } catch {}
+}
+
+async function askNotificationPermission() {
+  if ("Notification" in window && Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch {}
+  }
+}
+
+function nextStep() {
+  stopTimer();
+  if (cookingStepIndex >= cookingRecipe.steps.length - 1) {
+    alert("Meal complete. Enjoy!");
+    openRecipe(cookingRecipe.id);
+    return;
+  }
+  cookingStepIndex += 1;
+  renderCookStep();
+}
+
+document.getElementById("newRecipeBtn").addEventListener("click", () => openEditor());
+document.getElementById("addRecipeSmallBtn").addEventListener("click", () => openEditor());
+document.getElementById("addStepBtn").addEventListener("click", () => addStepEditor());
+document.getElementById("editRecipeBtn").addEventListener("click", () => openEditor(currentRecipeId));
+document.getElementById("startCookingBtn").addEventListener("click", async () => {
+  await askNotificationPermission();
+  startCooking();
+});
+document.getElementById("timerToggleBtn").addEventListener("click", toggleTimer);
+document.getElementById("skipTimerBtn").addEventListener("click", () => {
+  stopTimer();
+  timerRemaining = 0;
+  document.getElementById("timer").textContent = "00:00";
+  document.getElementById("timerToggleBtn").textContent = "Skipped";
+});
+document.getElementById("nextStepBtn").addEventListener("click", nextStep);
+document.getElementById("exitCookingBtn").addEventListener("click", () => {
+  stopTimer();
+  openRecipe(cookingRecipe.id);
+});
+
+document.querySelectorAll("[data-back]").forEach(button => {
+  button.addEventListener("click", () => {
+    if (button.closest("#editorView") && currentRecipeId) openRecipe(currentRecipeId);
+    else showView("homeView");
+  });
+});
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  document.getElementById("installBtn").classList.remove("hidden");
+});
+
+document.getElementById("installBtn").addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  document.getElementById("installBtn").classList.add("hidden");
+});
+
+// Service worker disabled in the single-file local version.
+
+renderRecipes();
+
+  </script>
+</body>
+</html>
