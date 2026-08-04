@@ -57,7 +57,6 @@ class _RecipeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final minutes = (recipe.totalSeconds / 60).ceil();
     final ingredients = SmartRecipeService.scaleIngredients(
       recipe: recipe,
       people: recipe.servings,
