@@ -1,29 +1,35 @@
-Kitchen Navigator v11.0 Alpha 6 - Open Planned Meal Fix
+Kitchen Navigator v11.0 Beta 1 - Dashboard Live Data Sync Fix
 
 Fixes:
-- Planner meal cards are now tappable
-- Recipe meals open guided cooking
-- Planned household servings are passed to cooking mode
-- Completing a recipe opens Kitchen Memory feedback
-- Simple foods display a meal summary
-- Three-dot menu includes Cook, Regenerate, Lock and Remove
+- Main-page Shopping card now uses the selected Version 11 shopping week
+- Purchased products are excluded from the remaining count
+- Shopping estimate updates from the monthly plan
+- Budget card shows current weekly estimate versus weekly budget
+- Budget note shows monthly estimate versus household monthly budget
+- Planner card uses today's Version 11 monthly-plan entries
+- Hero shopping count uses live remaining products
+- Overall health uses live outstanding shopping count
+- Adds a regression test preventing legacy values from returning
 
 Install:
 1. Extract this ZIP.
-2. Copy the lib folder into:
+2. Copy TWO items into:
    C:\Projects\KitchenNavigator
+   lib
+   test
 3. Choose Replace all.
 4. Run:
    C:\src\flutter\bin\flutter.bat test
    C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
 
 Test:
-1. Open Planner.
-2. Tap a recipe meal.
-3. Complete guided cooking.
-4. Save meal feedback.
+- Change the household monthly budget.
+- Add/regenerate monthly meals.
+- Open Shopping and mark products purchased.
+- Return to Dashboard.
+- Confirm Shopping count, weekly estimate and Budget update.
 
-After testing:
-   git add lib
-   git commit -m "Connect planned meals to cooking assistant"
+After successful testing:
+   git add lib test
+   git commit -m "Synchronize dashboard with Version 11 live data"
    git push

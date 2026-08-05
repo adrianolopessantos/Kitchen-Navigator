@@ -9,6 +9,8 @@ import '../nutrition/nutrition_screen.dart';
 import '../../models/nutrition.dart';
 import '../budget/budget_screen.dart';
 import '../family/household_setup_screen.dart';
+import '../../models/app_notification.dart';
+import '../notifications/notification_center_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -89,6 +91,59 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => openHouseholdSetup(context),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(
+                      Icons.notifications_outlined,
+                      color: AppColors.primary,
+                    ),
+                    title: const Text('Notification center'),
+                    subtitle: Text(
+                      '${state.unreadNotificationCount} unread smart alert${state.unreadNotificationCount == 1 ? '' : 's'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => openNotificationCenter(context),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    value:
+                        state.notificationPreferences.expiryAlerts,
+                    onChanged: (value) =>
+                        state.saveNotificationPreferences(
+                      state.notificationPreferences.copyWith(
+                        expiryAlerts: value,
+                      ),
+                    ),
+                    title: const Text('Expiry alerts'),
+                  ),
+                  SwitchListTile(
+                    value:
+                        state.notificationPreferences.budgetAlerts,
+                    onChanged: (value) =>
+                        state.saveNotificationPreferences(
+                      state.notificationPreferences.copyWith(
+                        budgetAlerts: value,
+                      ),
+                    ),
+                    title: const Text('Budget alerts'),
+                  ),
+                  SwitchListTile(
+                    value: state
+                        .notificationPreferences.shoppingReminders,
+                    onChanged: (value) =>
+                        state.saveNotificationPreferences(
+                      state.notificationPreferences.copyWith(
+                        shoppingReminders: value,
+                      ),
+                    ),
+                    title: const Text('Shopping reminders'),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),

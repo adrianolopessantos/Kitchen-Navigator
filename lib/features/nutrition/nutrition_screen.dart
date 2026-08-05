@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/state/app_scope.dart';
-import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
-import '../../models/nutrition.dart';
+import '../../models/nutrition_summary.dart';
 
 class NutritionScreen extends StatelessWidget {
   const NutritionScreen({super.key});
@@ -10,18 +9,18 @@ class NutritionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final totals = state.todayNutrition;
-    final targets = state.nutritionTargets;
-    final weekly = state.weeklyNutrition;
+    final household = state.todaysNutrition;
+    final members = state.todaysFamilyNutritionEstimates;
+    final available = state.hasTodaysNutrition;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Nutrition Center')),
+      appBar: AppBar(title: const Text('Nutrition intelligence')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
           children: [
             const Text(
-              'Today’s nutrition',
+              'Today’s planned nutrition',
               style: TextStyle(
                 color: AppColors.text,
                 fontSize: 28,
@@ -30,156 +29,106 @@ class NutritionScreen extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(
-              '${state.todayName} · ${_nutritionGoalLabel(state.nutritionGoal)}',
+              '${state.householdProfile.householdName} · '
+              '${state.householdPeople} people',
               style: const TextStyle(color: AppColors.muted),
             ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<NutritionGoal>(
-              initialValue: state.nutritionGoal,
-              decoration: const InputDecoration(
-                labelText: 'Nutrition goal',
-              ),
-              items: NutritionGoal.values.map((goal) {
-                return DropdownMenuItem(
-                  value: goal,
-                  child: Text(_nutritionGoalLabel(goal)),
-                );
-              }).toList(),
-              onChanged: (goal) {
-                if (goal != null) state.setNutritionGoal(goal);
-              },
-            ),
             const SizedBox(height: 16),
-            _NutritionProgressCard(
-              label: 'Calories',
-              value: totals.calories,
-              target: targets.calories,
-              unit: 'kcal',
-              icon: Icons.local_fire_department_outlined,
-            ),
-            const SizedBox(height: 10),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              childAspectRatio: 1.25,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              children: [
-                _NutrientTile(
-                  label: 'Protein',
-                  value: totals.protein,
-                  target: targets.protein,
-                  unit: 'g',
+            if (!available)
+              const _PendingCard()
+            else ...[
+              _HouseholdNutritionCard(summary: household),
+              const SizedBox(height: 18),
+              const Text(
+                'INDIVIDUAL ESTIMATES',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .7,
                 ),
-                _NutrientTile(
-                  label: 'Carbohydrates',
-                  value: totals.carbohydrates,
-                  target: targets.carbohydrates,
-                  unit: 'g',
-                ),
-                _NutrientTile(
-                  label: 'Fat',
-                  value: totals.fat,
-                  target: targets.fat,
-                  unit: 'g',
-                ),
-                _NutrientTile(
-                  label: 'Fibre',
-                  value: totals.fibre,
-                  target: targets.fibre,
-                  unit: 'g',
-                ),
-                _NutrientTile(
-                  label: 'Sugar',
-                  value: totals.sugar,
-                  target: targets.sugar,
-                  unit: 'g',
-                  lowerIsBetter: true,
-                ),
-                _NutrientTile(
-                  label: 'Salt',
-                  value: totals.salt,
-                  target: targets.salt,
-                  unit: 'g',
-                  lowerIsBetter: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'DAILY GUIDANCE',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .7,
               ),
-            ),
-            const SizedBox(height: 9),
-            ...state.nutritionAdvice.map(
-              (message) => Card(
-                margin: const EdgeInsets.only(bottom: 9),
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.auto_awesome,
-                    color: AppColors.primary,
+              const SizedBox(height: 8),
+              if (members.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text(
+                      'Add family members to split household nutrition estimates.',
+                      style: TextStyle(color: AppColors.muted),
+                    ),
                   ),
-                  title: Text(
-                    message,
-                    style: const TextStyle(color: AppColors.text),
+                )
+              else
+                ...members.map(
+                  (member) => _MemberNutritionCard(
+                    estimate: member,
+                  ),
+                ),
+              const SizedBox(height: 18),
+              Card(
+                color: AppColors.surfaceElevated,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: AppColors.primary,
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'All values are estimates derived from planned recipes and simple foods. Individual portions are allocated using age-based serving weights. They are not medical advice.',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'WEEKLY OVERVIEW',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .7,
-              ),
-            ),
-            const SizedBox(height: 9),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _WeeklyRow(
-                      label: 'Average calories',
-                      value:
-                          '${(weekly.calories / 7).round()} kcal/day',
-                    ),
-                    _WeeklyRow(
-                      label: 'Average protein',
-                      value:
-                          '${(weekly.protein / 7).round()} g/day',
-                    ),
-                    _WeeklyRow(
-                      label: 'Average fibre',
-                      value:
-                          '${(weekly.fibre / 7).round()} g/day',
-                    ),
-                    _WeeklyRow(
-                      label: 'Meals planned',
-                      value:
-                          '${AppState.days.fold<int>(0, (total, day) => total + state.mealsFor(day).length)}',
-                      last: true,
-                    ),
-                  ],
-                ),
-              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingCard extends StatelessWidget {
+  const _PendingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.monitor_heart_outlined,
+              color: AppColors.primary,
+              size: 44,
             ),
             const SizedBox(height: 12),
             const Text(
-              'Nutrition values are prototype estimates based on recipe ingredients. They are not medical advice.',
+              'Nutrition analysis pending',
+              textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 11,
+                color: AppColors.text,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
               ),
+            ),
+            const SizedBox(height: 7),
+            const Text(
+              'Plan meals for today to create household and individual nutrition estimates.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted),
             ),
           ],
         ),
@@ -188,59 +137,155 @@ class NutritionScreen extends StatelessWidget {
   }
 }
 
-class _NutritionProgressCard extends StatelessWidget {
-  const _NutritionProgressCard({
-    required this.label,
-    required this.value,
-    required this.target,
-    required this.unit,
-    required this.icon,
-  });
+class _HouseholdNutritionCard extends StatelessWidget {
+  const _HouseholdNutritionCard({required this.summary});
 
-  final String label;
-  final double value;
-  final double target;
-  final String unit;
-  final IconData icon;
+  final NutritionSummary summary;
 
   @override
   Widget build(BuildContext context) {
-    final progress = target <= 0
-        ? 0.0
-        : (value / target).clamp(0.0, 1.0);
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                Icon(icon, color: AppColors.primary),
-                const SizedBox(width: 9),
+                Icon(
+                  Icons.groups_outlined,
+                  color: AppColors.primary,
+                ),
+                SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    label,
-                    style: const TextStyle(
+                    'Whole household · Estimated',
+                    style: TextStyle(
                       color: AppColors.text,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              '${summary.calories.round()} kcal',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 30,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text(
+              '${summary.mealCount} planned meal${summary.mealCount == 1 ? '' : 's'} · '
+              '${summary.varietyScore}% variety',
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(
+                  child: _Metric(
+                    label: 'Protein',
+                    value: '${summary.protein.round()} g',
+                  ),
+                ),
+                Expanded(
+                  child: _Metric(
+                    label: 'Carbs',
+                    value:
+                        '${summary.carbohydrates.round()} g',
+                  ),
+                ),
+                Expanded(
+                  child: _Metric(
+                    label: 'Fat',
+                    value: '${summary.fat.round()} g',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberNutritionCard extends StatelessWidget {
+  const _MemberNutritionCard({required this.estimate});
+
+  final FamilyMemberNutritionEstimate estimate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 9),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  child: Icon(Icons.person_outline),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        estimate.memberName,
+                        style: const TextStyle(
+                          color: AppColors.text,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        '${(estimate.share * 100).round()}% estimated serving share',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Text(
-                  '${value.round()} / ${target.round()} $unit',
+                  '${estimate.calories.round()} kcal',
                   style: const TextStyle(
-                    color: AppColors.text,
+                    color: AppColors.primary,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              borderRadius: BorderRadius.circular(999),
+            Row(
+              children: [
+                Expanded(
+                  child: _Metric(
+                    label: 'Protein',
+                    value: '${estimate.protein.round()} g',
+                  ),
+                ),
+                Expanded(
+                  child: _Metric(
+                    label: 'Carbs',
+                    value:
+                        '${estimate.carbohydrates.round()} g',
+                  ),
+                ),
+                Expanded(
+                  child: _Metric(
+                    label: 'Fat',
+                    value: '${estimate.fat.round()} g',
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -249,106 +294,33 @@ class _NutritionProgressCard extends StatelessWidget {
   }
 }
 
-class _NutrientTile extends StatelessWidget {
-  const _NutrientTile({
+class _Metric extends StatelessWidget {
+  const _Metric({
     required this.label,
     required this.value,
-    required this.target,
-    required this.unit,
-    this.lowerIsBetter = false,
-  });
-
-  final String label;
-  final double value;
-  final double target;
-  final String unit;
-  final bool lowerIsBetter;
-
-  @override
-  Widget build(BuildContext context) {
-    final over = value > target;
-    final statusColor = lowerIsBetter && over
-        ? AppColors.warning
-        : AppColors.primary;
-
-    return Container(
-      constraints: const BoxConstraints(minHeight: 118),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '${value.round()} $unit',
-            style: TextStyle(
-              color: statusColor,
-              fontSize: 23,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.text,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Target ${target.round()} $unit',
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WeeklyRow extends StatelessWidget {
-  const _WeeklyRow({
-    required this.label,
-    required this.value,
-    this.last = false,
   });
 
   final String label;
   final String value;
-  final bool last;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(color: AppColors.muted),
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: AppColors.text,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.text,
+            fontWeight: FontWeight.w900,
           ),
         ),
-        if (!last) const Divider(height: 1),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.muted,
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
@@ -356,27 +328,8 @@ class _WeeklyRow extends StatelessWidget {
 
 Future<void> openNutritionCenter(BuildContext context) {
   return Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => const NutritionScreen()),
+    MaterialPageRoute(
+      builder: (_) => const NutritionScreen(),
+    ),
   );
-}
-
-String _nutritionGoalLabel(NutritionGoal goal) {
-  switch (goal) {
-    case NutritionGoal.balanced:
-      return 'Balanced';
-    case NutritionGoal.loseWeight:
-      return 'Lose weight';
-    case NutritionGoal.maintainWeight:
-      return 'Maintain weight';
-    case NutritionGoal.gainMuscle:
-      return 'Gain muscle';
-    case NutritionGoal.highProtein:
-      return 'High protein';
-    case NutritionGoal.vegetarian:
-      return 'Vegetarian';
-    case NutritionGoal.mediterranean:
-      return 'Mediterranean';
-    case NutritionGoal.lowCarb:
-      return 'Low carb';
-  }
 }

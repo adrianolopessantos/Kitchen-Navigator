@@ -14,6 +14,7 @@ import '../inventory/inventory_intelligence_screen.dart';
 import '../kitchens/kitchens_screen.dart';
 import '../nutrition/nutrition_screen.dart';
 import '../settings/settings_screen.dart';
+import '../notifications/notification_center_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
@@ -173,10 +174,12 @@ class DashboardScreen extends StatelessWidget {
                 DashboardCard(
                   icon: Icons.favorite_outline,
                   label: 'Nutrition',
-                  value:
-                      '${state.todayNutrition.calories.round()} kcal planned',
-                  note:
-                      '${state.todayNutrition.protein.round()} g protein · ${_nutritionGoalLabel(state.nutritionGoal)}',
+                  value: state.hasTodaysNutrition
+                      ? '${state.todaysNutrition.calories.round()} kcal household'
+                      : 'Nutrition analysis pending',
+                  note: state.hasTodaysNutrition
+                      ? '${state.todaysNutrition.protein.round()} g protein · Estimated'
+                      : 'Plan today’s meals to calculate estimates',
                   wide: true,
                   accentColor: AppColors.terracotta,
                   onTap: () => openNutritionCenter(context),

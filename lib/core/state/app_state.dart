@@ -12,9 +12,15 @@ import '../../models/household_profile.dart';
 import '../../models/monthly_meal_plan.dart';
 import '../../models/pantry_usage_event.dart';
 import '../../models/cooking_feedback.dart';
+import '../../models/app_notification.dart';
+import '../../models/nutrition_summary.dart';
+import '../../models/budget_forecast.dart';
 import '../services/pantry_intelligence_service.dart';
 import '../services/meal_plan_generator_service.dart';
 import '../services/cooking_feedback_service.dart';
+import '../services/notification_center_service.dart';
+import '../services/nutrition_intelligence_service.dart';
+import '../services/budget_intelligence_service.dart';
 import '../services/monthly_meal_plan_service.dart';
 import '../services/household_profile_service.dart';
 import '../../data/essential_recipe_library.dart';
@@ -94,6 +100,9 @@ class AppState extends ChangeNotifier {
   final List<PantryItem> pantryItems = [];
   final List<PantryUsageEvent> pantryUsageEvents = [];
   final List<CookingFeedback> cookingFeedback = [];
+  final List<AppNotification> appNotifications = [];
+  NotificationPreferences notificationPreferences =
+      const NotificationPreferences();
   final Set<String> checkedShoppingItems = {};
   final List<KitchenAppliance> kitchenAppliances = [];
   TemperatureUnit temperatureUnit = TemperatureUnit.celsius;
@@ -831,6 +840,14 @@ class AppState extends ChangeNotifier {
     cookingFeedback
       ..clear()
       ..addAll(await CookingFeedbackService.load());
+    appNotifications
+      ..clear()
+      ..addAll(
+        await NotificationCenterService.loadNotifications(),
+      );
+    notificationPreferences =
+        await NotificationCenterService.loadPreferences();
+    await refreshSmartNotifications();
 
     final profilesJson = preferences.getString(_profilesStorageKey);
     if (profilesJson != null && profilesJson.isNotEmpty) {
@@ -1322,6 +1339,9 @@ class AppState extends ChangeNotifier {
       'mealGenerationSummary': lastMealGenerationSummary,
       'cookingFeedbackCount': cookingFeedback.length,
       'familyAverageMealRating': familyAverageMealRating,
+      'unreadNotifications': unreadNotificationCount,
+      'nutritionCalories': todaysNutrition.calories,
+      'budgetForecastStatus': budgetForecast.projectedStatus,
       'monthlyShoppingItems': monthlyShoppingItems.length,
       'selectedShoppingWeek': selectedShoppingWeek,
     };
@@ -1554,6 +1574,178 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
+
+
+  NutritionSummary get todaysNutrition {
+    return NutritionIntelligenceService.summarizeDay(
+      date: DateTime.now(),
+      entries: monthlyMealPlan.entries,
+      recipes: recipes,
+    );
+  }
+
+
+  bool get hasTodaysNutrition =>
+      NutritionIntelligenceService.hasUsefulData(
+        todaysNutrition,
+      );
+
+  List<FamilyMemberNutritionEstimate>
+      get todaysFamilyNutritionEstimates {
+    return NutritionIntelligenceService.allocateToFamily(
+      household: todaysNutrition,
+      profile: householdProfile,
+    );
+  }
+
+  BudgetForecast get budgetForecast {
+    return BudgetIntelligenceService.forecast(
+      monthlyBudget: householdProfile.monthlyBudget,
+      estimatedMonthlyCost: estimatedMonthlyPlanShoppingTotal,
+    );
+  }
+
+  double get totalRecordedWasteQuantity {
+    return pantryUsageEvents
+        .where((event) => event.type == PantryUsageType.wasted)
+        .fold<double>(
+          0,
+          (total, event) => total + event.quantity,
+        );
+  }
+
+  int get unreadNotificationCount =>
+      appNotifications.where((value) => !value.read).length;
+
+  Future<void> saveNotificationPreferences(
+    NotificationPreferences value,
+  ) async {
+    notificationPreferences = value;
+    await NotificationCenterService.savePreferences(value);
+    await refreshSmartNotifications();
+    notifyListeners();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    for (var i = 0; i < appNotifications.length; i++) {
+      if (appNotifications[i].id == id) {
+        appNotifications[i] =
+            appNotifications[i].copyWith(read: true);
+      }
+    }
+    await NotificationCenterService.saveNotifications(
+      appNotifications,
+    );
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    for (var i = 0; i < appNotifications.length; i++) {
+      appNotifications[i] =
+          appNotifications[i].copyWith(read: true);
+    }
+    await NotificationCenterService.saveNotifications(
+      appNotifications,
+    );
+    notifyListeners();
+  }
+
+  Future<void> refreshSmartNotifications() async {
+    final generated = <AppNotification>[];
+    final now = DateTime.now();
+
+    if (notificationPreferences.mealReminders &&
+        todaysMonthlyMeals.isNotEmpty) {
+      generated.add(
+        AppNotification(
+          id: 'meal-${dateKeyFor(now)}',
+          type: AppNotificationType.meal,
+          title: 'Today’s meal plan is ready',
+          message:
+              '${todaysMonthlyMeals.length} meal${todaysMonthlyMeals.length == 1 ? '' : 's'} planned for today.',
+          createdAt: now,
+        ),
+      );
+    }
+
+    if (notificationPreferences.shoppingReminders &&
+        selectedWeeklyShoppingItems.isNotEmpty &&
+        checkedShoppingCountForWeek(selectedShoppingWeek) <
+            selectedWeeklyShoppingItems.length) {
+      final remaining = selectedWeeklyShoppingItems.length -
+          checkedShoppingCountForWeek(selectedShoppingWeek);
+      generated.add(
+        AppNotification(
+          id: 'shopping-${monthlyMealPlan.monthKey}-$selectedShoppingWeek',
+          type: AppNotificationType.shopping,
+          title: 'Shopping list needs attention',
+          message:
+              '$remaining product${remaining == 1 ? '' : 's'} remaining in Week $selectedShoppingWeek.',
+          createdAt: now,
+        ),
+      );
+    }
+
+    if (notificationPreferences.expiryAlerts &&
+        wasteRiskItems.isNotEmpty) {
+      generated.add(
+        AppNotification(
+          id: 'expiry-${dateKeyFor(now)}',
+          type: AppNotificationType.expiry,
+          title: 'Use food before it expires',
+          message:
+              '${wasteRiskItems.length} pantry product${wasteRiskItems.length == 1 ? '' : 's'} may be wasted.',
+          createdAt: now,
+        ),
+      );
+    }
+
+    if (notificationPreferences.budgetAlerts &&
+        budgetForecast.remainingBudget < 0) {
+      generated.add(
+        AppNotification(
+          id: 'budget-${monthlyMealPlan.monthKey}',
+          type: AppNotificationType.budget,
+          title: 'Monthly food budget forecast',
+          message:
+              'The current plan is €${budgetForecast.savingsTarget.toStringAsFixed(2)} over budget.',
+          createdAt: now,
+        ),
+      );
+    }
+
+    if (notificationPreferences.planningReminders &&
+        monthlyMealPlan.entries.isEmpty) {
+      generated.add(
+        AppNotification(
+          id: 'planning-${monthlyMealPlan.monthKey}',
+          type: AppNotificationType.planning,
+          title: 'Create this month’s meal plan',
+          message:
+              'Generate a plan to unlock shopping, nutrition and budget forecasts.',
+          createdAt: now,
+        ),
+      );
+    }
+
+    final previous = {
+      for (final value in appNotifications) value.id: value,
+    };
+
+    appNotifications
+      ..clear()
+      ..addAll(
+        generated.map(
+          (value) => previous[value.id] == null
+              ? value
+              : value.copyWith(read: previous[value.id]!.read),
+        ),
+      );
+
+    await NotificationCenterService.saveNotifications(
+      appNotifications,
+    );
+  }
 
   Future<void> refreshCookingFeedback() async {
     cookingFeedback
