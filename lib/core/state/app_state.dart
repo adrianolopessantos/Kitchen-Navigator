@@ -9,6 +9,11 @@ import '../../models/nutrition.dart';
 import '../services/nutrition_service.dart';
 import '../../models/recipe.dart';
 import '../../models/household_profile.dart';
+import '../../models/monthly_meal_plan.dart';
+import '../../models/pantry_usage_event.dart';
+import '../services/pantry_intelligence_service.dart';
+import '../services/meal_plan_generator_service.dart';
+import '../services/monthly_meal_plan_service.dart';
 import '../services/household_profile_service.dart';
 import '../../data/essential_recipe_library.dart';
 
@@ -31,6 +36,8 @@ class ShoppingItem {
     required this.category,
     required this.estimatedUnitPrice,
     required this.recipeNames,
+    this.week = 1,
+    this.sourceDateKeys = const [],
   });
 
   final String key;
@@ -40,6 +47,8 @@ class ShoppingItem {
   final String category;
   final double estimatedUnitPrice;
   final List<String> recipeNames;
+  final int week;
+  final List<String> sourceDateKeys;
 
   double get estimatedTotal => quantity * estimatedUnitPrice;
 }
@@ -51,6 +60,12 @@ class AppState extends ChangeNotifier {
 
   bool dataLoaded = false;
   HouseholdProfile householdProfile = HouseholdProfile.initial();
+  MonthlyMealPlan monthlyMealPlan =
+      MonthlyMealPlan.empty(DateTime.now());
+  DateTime selectedPlannerDate =
+      normalizedDate(DateTime.now());
+  int selectedShoppingWeek = 1;
+  String lastMealGenerationSummary = '';
 
   bool get householdSetupComplete =>
       householdProfile.setupComplete;
@@ -75,6 +90,7 @@ class AppState extends ChangeNotifier {
   };
 
   final List<PantryItem> pantryItems = [];
+  final List<PantryUsageEvent> pantryUsageEvents = [];
   final Set<String> checkedShoppingItems = {};
   final List<KitchenAppliance> kitchenAppliances = [];
   TemperatureUnit temperatureUnit = TemperatureUnit.celsius;
@@ -174,6 +190,93 @@ class AppState extends ChangeNotifier {
     if (score >= 70) return 'Good';
     if (score >= 50) return 'Needs attention';
     return 'At risk';
+  }
+
+  int plannedUsesForPantryItem(PantryItem item) {
+    final itemKey = _normalize(item.name);
+    var uses = 0;
+
+    for (final entry in monthlyMealPlan.entries) {
+      if (entry.recipeId == null) {
+        final simpleKey = _normalize(entry.name);
+        if (simpleKey == itemKey ||
+            simpleKey.contains(itemKey) ||
+            itemKey.contains(simpleKey)) {
+          uses++;
+        }
+        continue;
+      }
+
+      Recipe? recipe;
+      for (final candidate in recipes) {
+        if (candidate.id == entry.recipeId) {
+          recipe = candidate;
+          break;
+        }
+      }
+
+      if (recipe == null) continue;
+      final matches = recipe.ingredients.any((ingredient) {
+        final ingredientKey = _normalize(ingredient);
+        return ingredientKey == itemKey ||
+            ingredientKey.contains(itemKey) ||
+            itemKey.contains(ingredientKey);
+      });
+      if (matches) uses++;
+    }
+
+    return uses;
+  }
+
+  PantryItemInsight pantryInsightFor(PantryItem item) {
+    return PantryIntelligenceService.analyze(
+      item: item,
+      usageEvents: pantryUsageEvents,
+      plannedUses: plannedUsesForPantryItem(item),
+      minimumStock: _minimumStockFor(item),
+      now: DateTime.now(),
+    );
+  }
+
+  List<PantryItem> get wasteRiskItems {
+    final result = pantryItems
+        .where((item) => pantryInsightFor(item).wasteRisk)
+        .toList();
+    result.sort((a, b) {
+      final aDays = a.daysUntilExpiry(DateTime.now()) ?? 999;
+      final bDays = b.daysUntilExpiry(DateTime.now()) ?? 999;
+      return aDays.compareTo(bDays);
+    });
+    return result;
+  }
+
+  List<PantryItem> get restockSuggestedItems {
+    final result = pantryItems
+        .where(
+          (item) =>
+              pantryInsightFor(item).recommendedRestockQuantity > 0,
+        )
+        .toList();
+    result.sort(
+      (a, b) => pantryInsightFor(a)
+          .estimatedDaysRemaining
+          .compareTo(pantryInsightFor(b).estimatedDaysRemaining),
+    );
+    return result;
+  }
+
+  int get pantryCoveredPlanUses {
+    return pantryItems.fold<int>(
+      0,
+      (total, item) => total + plannedUsesForPantryItem(item),
+    );
+  }
+
+  double get estimatedWasteValue {
+    return wasteRiskItems.fold<double>(
+      0,
+      (total, item) => total + _estimatedItemValue(item),
+    );
   }
 
   int estimatedDaysRemaining(PantryItem item) {
@@ -384,8 +487,85 @@ class AppState extends ChangeNotifier {
     }).length;
   }
 
+  Future<void> consumePantryItem(
+    String id, {
+    double? quantity,
+  }) async {
+    final index = pantryItems.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+
+    final item = pantryItems[index];
+    final amount = (quantity ?? _defaultUsageAmount(item))
+        .clamp(0.0, item.quantity)
+        .toDouble();
+    if (amount <= 0) return;
+
+    pantryUsageEvents.add(
+      PantryUsageEvent(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        itemName: item.name,
+        quantity: amount,
+        unit: item.unit,
+        type: PantryUsageType.consumed,
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    final remaining = item.quantity - amount;
+    if (remaining <= 0) {
+      pantryItems.removeAt(index);
+    } else {
+      pantryItems[index] = item.copyWith(quantity: remaining);
+    }
+
+    await _savePantry();
+    await _savePantryUsage();
+    notifyListeners();
+  }
+
+  Future<void> markPantryItemWasted(String id) async {
+    final index = pantryItems.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+
+    final item = pantryItems.removeAt(index);
+    pantryUsageEvents.add(
+      PantryUsageEvent(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        itemName: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        type: PantryUsageType.wasted,
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await _savePantry();
+    await _savePantryUsage();
+    notifyListeners();
+  }
+
   void markPantryItemUsed(String id) {
-    removePantryItem(id);
+    consumePantryItem(id);
+  }
+
+  double _defaultUsageAmount(PantryItem item) {
+    final unit = item.unit.trim().toLowerCase();
+    if (unit == 'kg' || unit == 'l') return 0.25;
+    if (unit == 'g' || unit == 'ml') return 100;
+    return 1;
+  }
+
+  Future<void> addSuggestedRestockToShopping(
+    PantryItem item,
+  ) async {
+    final insight = pantryInsightFor(item);
+    if (insight.recommendedRestockQuantity <= 0) return;
+
+    checkedShoppingItems.removeWhere(
+      (key) => key.contains(_normalize(item.name)),
+    );
+    await _saveShoppingChecks();
+    notifyListeners();
   }
 
   List<PantryItem> get filteredPantryItems {
@@ -475,6 +655,151 @@ class AppState extends ChangeNotifier {
   }
 
 
+
+  int get shoppingWeeksInSelectedMonth {
+    final month = selectedPlannerDate;
+    final daysInMonth =
+        DateTime(month.year, month.month + 1, 0).day;
+    return ((daysInMonth - 1) ~/ 7) + 1;
+  }
+
+  double get weeklyShoppingBudget {
+    final weeks = shoppingWeeksInSelectedMonth;
+    return weeks == 0
+        ? householdProfile.monthlyBudget
+        : householdProfile.monthlyBudget / weeks;
+  }
+
+  void selectShoppingWeek(int week) {
+    selectedShoppingWeek =
+        week.clamp(1, shoppingWeeksInSelectedMonth);
+    notifyListeners();
+  }
+
+  List<ShoppingItem> get monthlyShoppingItems {
+    final totals = <String, _ShoppingAccumulator>{};
+
+    for (final entry in monthlyMealPlan.entries) {
+      final date = DateTime.tryParse(entry.dateKey);
+      if (date == null) continue;
+
+      final week = ((date.day - 1) ~/ 7) + 1;
+      final ingredients = <String>[];
+
+      if (entry.recipeId != null) {
+        Recipe? recipe;
+        for (final candidate in recipes) {
+          if (candidate.id == entry.recipeId) {
+            recipe = candidate;
+            break;
+          }
+        }
+        ingredients.addAll(recipe?.ingredients ?? [entry.name]);
+      } else {
+        ingredients.add(entry.name);
+      }
+
+      for (final ingredient in ingredients) {
+        final key = _normalize(ingredient);
+        if (key.isEmpty || _pantryContains(key)) continue;
+
+        final info = _ingredientInfo(ingredient);
+        final servingScale =
+            math.max(1.0, entry.servings / householdPeople);
+        final accumulator = totals.putIfAbsent(
+          '$week:$key',
+          () => _ShoppingAccumulator(
+            name: ingredient,
+            quantity: 0,
+            unit: info.unit,
+            category: info.category,
+            price: info.price,
+            recipeNames: <String>{},
+          ),
+        );
+
+        accumulator.quantity +=
+            info.baseQuantity * servingScale;
+        accumulator.recipeNames.add(entry.name);
+        accumulator.dateKeys.add(entry.dateKey);
+      }
+    }
+
+    final result = totals.entries.map((entry) {
+      final separator = entry.key.indexOf(':');
+      final week =
+          int.tryParse(entry.key.substring(0, separator)) ?? 1;
+      final key = entry.key.substring(separator + 1);
+      final value = entry.value;
+
+      return ShoppingItem(
+        key: 'month-${monthlyMealPlan.monthKey}-w$week-$key',
+        name: value.name,
+        quantity: _roundQuantity(value.quantity),
+        unit: value.unit,
+        category: value.category,
+        estimatedUnitPrice: value.price,
+        recipeNames: value.recipeNames.toList()..sort(),
+        week: week,
+        sourceDateKeys: value.dateKeys.toList()..sort(),
+      );
+    }).toList()
+      ..sort((a, b) {
+        final weekCompare = a.week.compareTo(b.week);
+        if (weekCompare != 0) return weekCompare;
+        final categoryCompare = a.category.compareTo(b.category);
+        if (categoryCompare != 0) return categoryCompare;
+        return a.name.compareTo(b.name);
+      });
+
+    return result;
+  }
+
+  List<ShoppingItem> shoppingItemsForWeek(int week) {
+    return monthlyShoppingItems
+        .where((item) => item.week == week)
+        .toList();
+  }
+
+  List<ShoppingItem> get selectedWeeklyShoppingItems =>
+      shoppingItemsForWeek(selectedShoppingWeek);
+
+  double estimatedShoppingTotalForWeek(int week) {
+    return shoppingItemsForWeek(week).fold(
+      0,
+      (total, item) => total + item.estimatedTotal,
+    );
+  }
+
+  double get estimatedMonthlyPlanShoppingTotal =>
+      monthlyShoppingItems.fold(
+        0,
+        (total, item) => total + item.estimatedTotal,
+      );
+
+  Map<String, List<ShoppingItem>>
+      shoppingGroupsForSelectedWeek() {
+    final groups = <String, List<ShoppingItem>>{};
+    for (final item in selectedWeeklyShoppingItems) {
+      groups.putIfAbsent(item.category, () => []).add(item);
+    }
+    return groups;
+  }
+
+  int checkedShoppingCountForWeek(int week) {
+    return shoppingItemsForWeek(week)
+        .where((item) => isShoppingChecked(item.key))
+        .length;
+  }
+
+  Future<void> clearShoppingChecksForWeek(int week) async {
+    final weekKeys =
+        shoppingItemsForWeek(week).map((item) => item.key).toSet();
+    checkedShoppingItems.removeWhere(weekKeys.contains);
+    await _saveShoppingChecks();
+    notifyListeners();
+  }
+
   static const _profilesStorageKey =
       'kitchen_navigator_kitchen_profiles_v1';
   static const _activeKitchenStorageKey =
@@ -486,6 +811,8 @@ class AppState extends ChangeNotifier {
       'kitchen_navigator_${activeKitchenId}_pantry_v1';
   String get _plannerStorageKey =>
       'kitchen_navigator_${activeKitchenId}_planner_v1';
+  String get _pantryUsageStorageKey =>
+      'kitchen_navigator_${activeKitchenId}_pantry_usage_v11';
   String get _shoppingChecksStorageKey =>
       'kitchen_navigator_${activeKitchenId}_shopping_checks_v1';
   String get _equipmentStorageKey =>
@@ -496,6 +823,8 @@ class AppState extends ChangeNotifier {
   Future<void> _loadSavedData() async {
     final preferences = await SharedPreferences.getInstance();
     householdProfile = await HouseholdProfileService.load();
+    monthlyMealPlan =
+        await MonthlyMealPlanService.load(DateTime.now());
 
     final profilesJson = preferences.getString(_profilesStorageKey);
     if (profilesJson != null && profilesJson.isNotEmpty) {
@@ -543,6 +872,7 @@ class AppState extends ChangeNotifier {
     SharedPreferences preferences,
   ) async {
     pantryItems.clear();
+    pantryUsageEvents.clear();
     checkedShoppingItems.clear();
     kitchenAppliances.clear();
     for (final day in days) {
@@ -556,6 +886,19 @@ class AppState extends ChangeNotifier {
         pantryItems.addAll(
           decoded.map(
             (value) => _pantryItemFromJson(
+              Map<String, dynamic>.from(value as Map),
+            ),
+          ),
+        );
+      }
+
+      final usageJson =
+          preferences.getString(_pantryUsageStorageKey);
+      if (usageJson != null && usageJson.isNotEmpty) {
+        final decoded = jsonDecode(usageJson) as List<dynamic>;
+        pantryUsageEvents.addAll(
+          decoded.map(
+            (value) => PantryUsageEvent.fromJson(
               Map<String, dynamic>.from(value as Map),
             ),
           ),
@@ -627,6 +970,7 @@ class AppState extends ChangeNotifier {
               : TemperatureUnit.celsius;
     } catch (_) {
       pantryItems.clear();
+      pantryUsageEvents.clear();
       checkedShoppingItems.clear();
       kitchenAppliances.clear();
       for (final day in days) {
@@ -711,6 +1055,9 @@ class AppState extends ChangeNotifier {
       'kitchen_navigator_${id}_pantry_v1',
     );
     await preferences.remove(
+      'kitchen_navigator_${id}_pantry_usage_v11',
+    );
+    await preferences.remove(
       'kitchen_navigator_${id}_planner_v1',
     );
     await preferences.remove(
@@ -761,6 +1108,16 @@ class AppState extends ChangeNotifier {
     await preferences.setString(_pantryStorageKey, encoded);
   }
 
+  Future<void> _savePantryUsage() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _pantryUsageStorageKey,
+      jsonEncode(
+        pantryUsageEvents.map((event) => event.toJson()).toList(),
+      ),
+    );
+  }
+
   Future<void> _savePlanner() async {
     final preferences = await SharedPreferences.getInstance();
     final data = <String, dynamic>{};
@@ -793,14 +1150,19 @@ class AppState extends ChangeNotifier {
   Future<void> clearAllSavedData() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_pantryStorageKey);
+    await preferences.remove(_pantryUsageStorageKey);
     await preferences.remove(_plannerStorageKey);
     await preferences.remove(_shoppingChecksStorageKey);
     await preferences.remove(_equipmentStorageKey);
     await preferences.remove(_temperatureUnitStorageKey);
     await HouseholdProfileService.clear();
+    await MonthlyMealPlanService.clear();
 
     householdProfile = HouseholdProfile.initial();
+    monthlyMealPlan = MonthlyMealPlan.empty(DateTime.now());
+    selectedPlannerDate = normalizedDate(DateTime.now());
     pantryItems.clear();
+    pantryUsageEvents.clear();
     checkedShoppingItems.clear();
     kitchenAppliances.clear();
     temperatureUnit = TemperatureUnit.celsius;
@@ -935,6 +1297,9 @@ class AppState extends ChangeNotifier {
       'activeKitchen': activeKitchen.name,
       'kitchens': kitchenProfiles.length,
       'pantryItems': pantryItems.length,
+      'pantryUsageEvents': pantryUsageEvents.length,
+      'wasteRiskItems': wasteRiskItems.length,
+      'restockSuggestions': restockSuggestedItems.length,
       'plannedMeals': days.fold<int>(
         0,
         (total, day) => total + mealsFor(day).length,
@@ -947,6 +1312,10 @@ class AppState extends ChangeNotifier {
       'dataLoaded': dataLoaded,
       'householdSetupComplete': householdSetupComplete,
       'householdMembers': householdProfile.members.length,
+      'monthlyPlanEntries': monthlyMealPlan.entries.length,
+      'mealGenerationSummary': lastMealGenerationSummary,
+      'monthlyShoppingItems': monthlyShoppingItems.length,
+      'selectedShoppingWeek': selectedShoppingWeek,
     };
   }
 
@@ -989,6 +1358,191 @@ class AppState extends ChangeNotifier {
       goal.name,
     );
     notifyListeners();
+  }
+
+
+  List<MonthlyMealEntry> monthlyMealsFor(DateTime date) {
+    return monthlyMealPlan.forDate(date);
+  }
+
+  void selectPlannerDate(DateTime date) {
+    selectedPlannerDate = normalizedDate(date);
+    notifyListeners();
+  }
+
+  Future<void> changePlannerMonth(DateTime month) async {
+    monthlyMealPlan = await MonthlyMealPlanService.load(month);
+    selectedPlannerDate = DateTime(month.year, month.month, 1);
+    selectedShoppingWeek = 1;
+    notifyListeners();
+  }
+
+  List<MealSlotType> get activeMealSlots {
+    final result = <MealSlotType>[];
+
+    if (householdProfile.mealsPerDay >= 1) {
+      result.add(MealSlotType.breakfast);
+    }
+    if (householdProfile.snacksPerDay >= 1) {
+      result.add(MealSlotType.morningSnack);
+    }
+    if (householdProfile.mealsPerDay >= 2) {
+      result.add(MealSlotType.lunch);
+    }
+    if (householdProfile.snacksPerDay >= 2) {
+      result.add(MealSlotType.afternoonSnack);
+    }
+    if (householdProfile.mealsPerDay >= 3) {
+      result.add(MealSlotType.dinner);
+    }
+    if (householdProfile.snacksPerDay >= 3) {
+      result.add(MealSlotType.eveningSnack);
+    }
+
+    return result;
+  }
+
+  Future<void> addSimpleMonthlyMeal({
+    required DateTime date,
+    required MealSlotType slot,
+    required String name,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+
+    final entry = MonthlyMealEntry(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      dateKey: dateKeyFor(date),
+      slot: slot,
+      name: trimmed,
+      servings: householdPeople,
+      simpleFood: true,
+    );
+
+    monthlyMealPlan = monthlyMealPlan.copyWith(
+      entries: [...monthlyMealPlan.entries, entry],
+    );
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+  Future<void> addRecipeMonthlyMeal({
+    required DateTime date,
+    required MealSlotType slot,
+    required Recipe recipe,
+  }) async {
+    final entry = MonthlyMealEntry(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      dateKey: dateKeyFor(date),
+      slot: slot,
+      name: recipe.name,
+      servings: householdPeople,
+      recipeId: recipe.id,
+    );
+
+    monthlyMealPlan = monthlyMealPlan.copyWith(
+      entries: [...monthlyMealPlan.entries, entry],
+    );
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+  Future<void> removeMonthlyMeal(String id) async {
+    monthlyMealPlan = monthlyMealPlan.copyWith(
+      entries: monthlyMealPlan.entries
+          .where((entry) => entry.id != id)
+          .toList(),
+    );
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+  Future<void> toggleMonthlyMealLock(String id) async {
+    monthlyMealPlan = monthlyMealPlan.copyWith(
+      entries: monthlyMealPlan.entries.map((entry) {
+        if (entry.id != id) return entry;
+        return entry.copyWith(locked: !entry.locked);
+      }).toList(),
+    );
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+  Future<void> clearMonthlyDay(DateTime date) async {
+    final key = dateKeyFor(date);
+    monthlyMealPlan = monthlyMealPlan.copyWith(
+      entries: monthlyMealPlan.entries
+          .where((entry) => entry.dateKey != key || entry.locked)
+          .toList(),
+    );
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+  Future<void> generateMonthlyFoundation() async {
+    await generatePersonalizedMonth();
+  }
+
+  Future<void> generatePersonalizedMonth() async {
+    await _runMealGeneration();
+  }
+
+  Future<void> regenerateMonthlyMeal(
+    MonthlyMealEntry entry,
+  ) async {
+    if (entry.locked) return;
+    final date = DateTime.tryParse(entry.dateKey);
+    if (date == null) return;
+
+    await _runMealGeneration(
+      targetDate: date,
+      targetSlot: entry.slot,
+    );
+  }
+
+  Future<void> regenerateMonthlyDay(DateTime date) async {
+    await _runMealGeneration(targetDate: date);
+  }
+
+  Future<void> regenerateMonthlyWeek(int week) async {
+    await _runMealGeneration(targetWeek: week);
+  }
+
+  Future<void> _runMealGeneration({
+    DateTime? targetDate,
+    int? targetWeek,
+    MealSlotType? targetSlot,
+  }) async {
+    final result = MealPlanGeneratorService.generate(
+      MealPlanGenerationRequest(
+        month: selectedPlannerDate,
+        household: householdProfile,
+        recipes: recipes,
+        pantryItems: pantryItems,
+        appliances: kitchenAppliances,
+        activeSlots: activeMealSlots,
+        existingEntries: monthlyMealPlan.entries,
+        targetDate: targetDate,
+        targetWeek: targetWeek,
+        targetSlot: targetSlot,
+      ),
+    );
+
+    monthlyMealPlan = result.plan;
+    lastMealGenerationSummary = result.summary;
+    await MonthlyMealPlanService.save(monthlyMealPlan);
+    notifyListeners();
+  }
+
+
+  Map<int, List<MonthlyMealEntry>> get weeklyShoppingPeriods {
+    final result = <int, List<MonthlyMealEntry>>{};
+    for (final entry in monthlyMealPlan.entries) {
+      final date = DateTime.parse(entry.dateKey);
+      final week = ((date.day - 1) ~/ 7) + 1;
+      result.putIfAbsent(week, () => []).add(entry);
+    }
+    return result;
   }
 
   void selectDay(String day) {
@@ -1255,4 +1809,5 @@ class _ShoppingAccumulator {
   final String category;
   final double price;
   final Set<String> recipeNames;
+  final Set<String> dateKeys = <String>{};
 }

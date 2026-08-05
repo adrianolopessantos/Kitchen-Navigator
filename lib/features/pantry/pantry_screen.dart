@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/state/app_scope.dart';
+import '../../core/services/pantry_intelligence_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/pantry_item.dart';
 import '../expiry/expiry_screen.dart';
@@ -30,6 +31,16 @@ class _PantryScreenState extends State<PantryScreen> {
       return matchesQuery && matchesLocation;
     }).toList()
       ..sort((a, b) {
+        final aInsight = state.pantryInsightFor(a);
+        final bInsight = state.pantryInsightFor(b);
+
+        if (aInsight.wasteRisk != bInsight.wasteRisk) {
+          return aInsight.wasteRisk ? -1 : 1;
+        }
+        if (aInsight.lowStock != bInsight.lowStock) {
+          return aInsight.lowStock ? -1 : 1;
+        }
+
         final aDays = a.daysUntilExpiry(now) ?? 9999;
         final bDays = b.daysUntilExpiry(now) ?? 9999;
         return aDays.compareTo(bDays);
@@ -51,13 +62,45 @@ class _PantryScreenState extends State<PantryScreen> {
                   count: state.pantryCount,
                   health: state.pantryHealthScore,
                   expiring: state.useSoonItems.length,
-                  lowStock: state.lowStockItems.length,
+                  lowStock: state.restockSuggestedItems.length,
+                  wasteRisk: state.wasteRiskItems.length,
+                  coveredUses: state.pantryCoveredPlanUses,
+                  estimatedWaste: state.estimatedWasteValue,
                   onInsights: () =>
                       openInventoryIntelligence(context),
                   onExpiry: () =>
                       openExpiryIntelligence(context),
                   onAdd: () => _showItemEditor(context),
                 ),
+                const SizedBox(height: AppSpacing.lg),
+                if (state.wasteRiskItems.isNotEmpty)
+                  _AttentionCard(
+                    title: 'Use these products soon',
+                    message:
+                        '${state.wasteRiskItems.length} product${state.wasteRiskItems.length == 1 ? '' : 's'} '
+                        'may expire before the monthly plan uses them.',
+                    icon: Icons.warning_amber_rounded,
+                    color: AppColors.warning,
+                    items: state.wasteRiskItems
+                        .take(3)
+                        .map((item) => item.name)
+                        .join(' · '),
+                  ),
+                if (state.wasteRiskItems.isNotEmpty)
+                  const SizedBox(height: AppSpacing.sm),
+                if (state.restockSuggestedItems.isNotEmpty)
+                  _AttentionCard(
+                    title: 'Smart restock suggestions',
+                    message:
+                        '${state.restockSuggestedItems.length} product${state.restockSuggestedItems.length == 1 ? '' : 's'} '
+                        'are predicted to run low.',
+                    icon: Icons.add_shopping_cart,
+                    color: AppColors.terracotta,
+                    items: state.restockSuggestedItems
+                        .take(3)
+                        .map((item) => item.name)
+                        .join(' · '),
+                  ),
                 const SizedBox(height: AppSpacing.lg),
                 TextField(
                   onChanged: (value) =>
@@ -107,16 +150,23 @@ class _PantryScreenState extends State<PantryScreen> {
                       ),
                       child: _PantryProductCard(
                         item: item,
+                        insight: state.pantryInsightFor(item),
                         onEdit: () => _showItemEditor(
                           context,
                           existing: item,
                         ),
-                        onUse: () {
-                          state.markPantryItemUsed(item.id);
+                        onConsume: () =>
+                            _showConsumeDialog(context, item),
+                        onWaste: () =>
+                            _confirmWaste(context, item),
+                        onRestock: () async {
+                          await state
+                              .addSuggestedRestockToShopping(item);
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${item.name} marked as used.',
+                                '${item.name} marked for restocking.',
                               ),
                             ),
                           );
@@ -132,22 +182,99 @@ class _PantryScreenState extends State<PantryScreen> {
     );
   }
 
+  Future<void> _showConsumeDialog(
+    BuildContext context,
+    PantryItem item,
+  ) async {
+    final state = AppScope.of(context);
+    final controller = TextEditingController(
+      text: _defaultUsage(item).toString(),
+    );
+
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Use ${item.name}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Quantity used',
+            suffixText: item.unit,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              double.tryParse(
+                controller.text.replaceAll(',', '.'),
+              ),
+            ),
+            child: const Text('Record use'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (amount != null && amount > 0) {
+      await state.consumePantryItem(item.id, quantity: amount);
+    }
+  }
+
+  Future<void> _confirmWaste(
+    BuildContext context,
+    PantryItem item,
+  ) async {
+    final state = AppScope.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Record food waste?'),
+        content: Text(
+          '${item.name} will be removed from the Pantry and recorded '
+          'in the usage history as wasted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Record waste'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await state.markPantryItemWasted(item.id);
+    }
+  }
+
   Future<void> _showItemEditor(
     BuildContext context, {
     PantryItem? existing,
   }) async {
     final state = AppScope.of(context);
-    final nameController = TextEditingController(
-      text: existing?.name ?? '',
-    );
+    final nameController =
+        TextEditingController(text: existing?.name ?? '');
     final quantityController = TextEditingController(
       text: existing == null
           ? '1'
           : _formatQuantity(existing.quantity),
     );
-    final unitController = TextEditingController(
-      text: existing?.unit ?? 'each',
-    );
+    final unitController =
+        TextEditingController(text: existing?.unit ?? 'each');
     var location =
         existing?.location ?? StorageLocation.pantry;
     DateTime? expiryDate = existing?.expiryDate;
@@ -175,9 +302,8 @@ class _PantryScreenState extends State<PantryScreen> {
                       existing == null
                           ? 'Add pantry product'
                           : 'Edit pantry product',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium,
+                      style:
+                          Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     TextField(
@@ -219,12 +345,14 @@ class _PantryScreenState extends State<PantryScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Storage location',
                       ),
-                      items: StorageLocation.values.map((value) {
-                        return DropdownMenuItem(
-                          value: value,
-                          child: Text(value.label),
-                        );
-                      }).toList(),
+                      items: StorageLocation.values
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value.label),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (value) {
                         if (value != null) {
                           setModalState(() => location = value);
@@ -249,7 +377,8 @@ class _PantryScreenState extends State<PantryScreen> {
                         onTap: () async {
                           final selected = await showDatePicker(
                             context: context,
-                            initialDate: expiryDate ?? DateTime.now(),
+                            initialDate:
+                                expiryDate ?? DateTime.now(),
                             firstDate: DateTime.now().subtract(
                               const Duration(days: 365),
                             ),
@@ -317,9 +446,8 @@ class _PantryScreenState extends State<PantryScreen> {
                           Navigator.pop(sheetContext);
                         },
                         child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: 15,
-                          ),
+                          padding:
+                              EdgeInsets.symmetric(vertical: 15),
                           child: Text('Save product'),
                         ),
                       ),
@@ -345,6 +473,9 @@ class _PantryHeader extends StatelessWidget {
     required this.health,
     required this.expiring,
     required this.lowStock,
+    required this.wasteRisk,
+    required this.coveredUses,
+    required this.estimatedWaste,
     required this.onInsights,
     required this.onExpiry,
     required this.onAdd,
@@ -354,6 +485,9 @@ class _PantryHeader extends StatelessWidget {
   final int health;
   final int expiring;
   final int lowStock;
+  final int wasteRisk;
+  final int coveredUses;
+  final double estimatedWaste;
   final VoidCallback onInsights;
   final VoidCallback onExpiry;
   final VoidCallback onAdd;
@@ -370,13 +504,13 @@ class _PantryHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Pantry',
+                    'Pantry intelligence',
                     style:
                         Theme.of(context).textTheme.headlineLarge,
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Everything stored in this kitchen',
+                    'Stock predictions, planned demand and waste risk',
                     style: TextStyle(color: AppColors.muted),
                   ),
                 ],
@@ -411,80 +545,163 @@ class _PantryHeader extends StatelessWidget {
               color: const Color(0xFF39513E),
             ),
           ),
-          child: Row(
+          child: Column(
             children: [
-              SizedBox(
-                width: 78,
-                height: 78,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CircularProgressIndicator(
-                      value: health / 100,
-                      strokeWidth: 8,
-                    ),
-                    Center(
-                      child: Text(
-                        '$health%',
-                        style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.lg),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'PANTRY HEALTH',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .9,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      '$count products stored',
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+              Row(
+                children: [
+                  SizedBox(
+                    width: 76,
+                    height: 76,
+                    child: Stack(
+                      fit: StackFit.expand,
                       children: [
-                        _StatusPill(
-                          icon: Icons.event_busy_outlined,
-                          text: '$expiring expiring',
-                          warning: expiring > 0,
-                          onTap: onExpiry,
+                        CircularProgressIndicator(
+                          value: health / 100,
+                          strokeWidth: 8,
                         ),
-                        _StatusPill(
-                          icon: Icons.inventory_2_outlined,
-                          text: '$lowStock low stock',
-                          warning: lowStock > 0,
-                          onTap: onInsights,
+                        Center(
+                          child: Text(
+                            '$health%',
+                            style: const TextStyle(
+                              color: AppColors.text,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'PANTRY HEALTH',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: .9,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          '$count products · $coveredUses planned uses',
+                          style: const TextStyle(
+                            color: AppColors.text,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Potential waste: €${estimatedWaste.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _StatusPill(
+                    icon: Icons.event_busy_outlined,
+                    text: '$expiring expiring',
+                    warning: expiring > 0,
+                    onTap: onExpiry,
+                  ),
+                  _StatusPill(
+                    icon: Icons.add_shopping_cart,
+                    text: '$lowStock restock',
+                    warning: lowStock > 0,
+                    onTap: onInsights,
+                  ),
+                  _StatusPill(
+                    icon: Icons.delete_outline,
+                    text: '$wasteRisk waste risk',
+                    warning: wasteRisk > 0,
+                    onTap: onExpiry,
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AttentionCard extends StatelessWidget {
+  const _AttentionCard({
+    required this.title,
+    required this.message,
+    required this.icon,
+    required this.color,
+    required this.items,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
+  final Color color;
+  final String items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      items,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -511,10 +728,8 @@ class _StatusPill extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.pill),
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 7,
-        ),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
           color: color.withValues(alpha: .12),
           borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -545,19 +760,24 @@ class _StatusPill extends StatelessWidget {
 class _PantryProductCard extends StatelessWidget {
   const _PantryProductCard({
     required this.item,
+    required this.insight,
     required this.onEdit,
-    required this.onUse,
+    required this.onConsume,
+    required this.onWaste,
+    required this.onRestock,
   });
 
   final PantryItem item;
+  final PantryItemInsight insight;
   final VoidCallback onEdit;
-  final VoidCallback onUse;
+  final VoidCallback onConsume;
+  final VoidCallback onWaste;
+  final VoidCallback onRestock;
 
   @override
   Widget build(BuildContext context) {
     final days = item.daysUntilExpiry(DateTime.now());
     final urgency = _urgency(days);
-    final progress = _quantityProgress(item);
 
     return Card(
       child: Padding(
@@ -596,10 +816,11 @@ class _PantryProductCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${_formatQuantity(item.quantity)} ${item.unit}',
+                        '${_formatQuantity(item.quantity)} ${item.unit} · '
+                        '~${insight.estimatedDaysRemaining} days remaining',
                         style: const TextStyle(
                           color: AppColors.muted,
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -609,7 +830,7 @@ class _PantryProductCard extends StatelessWidget {
                 PopupMenuButton<String>(
                   onSelected: (value) {
                     if (value == 'edit') onEdit();
-                    if (value == 'use') onUse();
+                    if (value == 'waste') onWaste();
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(
@@ -617,29 +838,25 @@ class _PantryProductCard extends StatelessWidget {
                       child: Text('Edit'),
                     ),
                     PopupMenuItem(
-                      value: 'use',
-                      child: Text('Mark as used'),
+                      value: 'waste',
+                      child: Text('Record waste'),
                     ),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            ClipRRect(
-              borderRadius:
-                  BorderRadius.circular(AppRadius.pill),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                _ProductBadge(
-                  icon: Icons.place_outlined,
-                  text: item.location.label,
-                  color: AppColors.primary,
+                Expanded(
+                  child: _ProductBadge(
+                    icon: Icons.calendar_month_outlined,
+                    text:
+                        '${insight.plannedUses} planned use${insight.plannedUses == 1 ? '' : 's'}',
+                    color: insight.plannedUses > 0
+                        ? AppColors.primary
+                        : AppColors.muted,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -651,85 +868,49 @@ class _PantryProductCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (insight.wasteRisk || insight.lowStock) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onConsume,
+                      icon: const Icon(Icons.restaurant),
+                      label: const Text('Record use'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed:
+                          insight.lowStock ? onRestock : onConsume,
+                      icon: Icon(
+                        insight.lowStock
+                            ? Icons.add_shopping_cart
+                            : Icons.eco_outlined,
+                      ),
+                      label: Text(
+                        insight.lowStock ? 'Restock' : 'Use soon',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: AppSpacing.sm),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onConsume,
+                  icon: const Icon(Icons.restaurant),
+                  label: const Text('Record product use'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  static _Urgency _urgency(int? days) {
-    if (days == null) {
-      return const _Urgency(
-        text: 'No expiry date',
-        color: AppColors.muted,
-        icon: Icons.event_available_outlined,
-      );
-    }
-    if (days < 0) {
-      return _Urgency(
-        text:
-            'Expired ${days.abs()} day${days.abs() == 1 ? '' : 's'} ago',
-        color: AppColors.danger,
-        icon: Icons.warning_amber_rounded,
-      );
-    }
-    if (days == 0) {
-      return const _Urgency(
-        text: 'Expires today',
-        color: AppColors.danger,
-        icon: Icons.warning_amber_rounded,
-      );
-    }
-    if (days <= 3) {
-      return _Urgency(
-        text: 'Expires in $days days',
-        color: AppColors.warning,
-        icon: Icons.schedule_outlined,
-      );
-    }
-    return _Urgency(
-      text: 'Fresh for $days days',
-      color: AppColors.primary,
-      icon: Icons.eco_outlined,
-    );
-  }
-
-  static double _quantityProgress(PantryItem item) {
-    final unit = item.unit.toLowerCase();
-    double maxValue;
-    if (unit == 'kg' || unit == 'l') {
-      maxValue = 2;
-    } else if (unit == 'g' || unit == 'ml') {
-      maxValue = 1000;
-    } else {
-      maxValue = 10;
-    }
-    return (item.quantity / maxValue).clamp(0.05, 1.0);
-  }
-
-  static IconData _iconFor(String name) {
-    final key = name.toLowerCase();
-    if (key.contains('milk') ||
-        key.contains('cheese') ||
-        key.contains('yogurt')) {
-      return Icons.local_drink_outlined;
-    }
-    if (key.contains('chicken') ||
-        key.contains('beef') ||
-        key.contains('fish')) {
-      return Icons.set_meal_outlined;
-    }
-    if (key.contains('apple') ||
-        key.contains('tomato') ||
-        key.contains('onion') ||
-        key.contains('potato') ||
-        key.contains('lemon')) {
-      return Icons.eco_outlined;
-    }
-    if (key.contains('bread')) {
-      return Icons.bakery_dining_outlined;
-    }
-    return Icons.inventory_2_outlined;
   }
 }
 
@@ -747,26 +928,23 @@ class _ProductBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 7,
-      ),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: color),
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 5),
-          Flexible(
+          Expanded(
             child: Text(
               text,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -782,26 +960,18 @@ class _EmptyPantry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return const Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: EdgeInsets.all(AppSpacing.xl),
         child: Column(
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceElevated,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.kitchen_outlined,
-                color: AppColors.primary,
-                size: 34,
-              ),
+            Icon(
+              Icons.kitchen_outlined,
+              color: AppColors.primary,
+              size: 42,
             ),
-            const SizedBox(height: AppSpacing.md),
-            const Text(
+            SizedBox(height: AppSpacing.md),
+            Text(
               'No pantry products found',
               style: TextStyle(
                 color: AppColors.text,
@@ -809,8 +979,8 @@ class _EmptyPantry extends StatelessWidget {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
+            SizedBox(height: 6),
+            Text(
               'Add products or change the active filters.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.muted),
@@ -834,10 +1004,78 @@ class _Urgency {
   final IconData icon;
 }
 
+_Urgency _urgency(int? days) {
+  if (days == null) {
+    return const _Urgency(
+      text: 'No expiry date',
+      color: AppColors.muted,
+      icon: Icons.event_available_outlined,
+    );
+  }
+  if (days < 0) {
+    return _Urgency(
+      text: 'Expired ${days.abs()} day${days.abs() == 1 ? '' : 's'} ago',
+      color: AppColors.danger,
+      icon: Icons.warning_amber_rounded,
+    );
+  }
+  if (days == 0) {
+    return const _Urgency(
+      text: 'Expires today',
+      color: AppColors.danger,
+      icon: Icons.warning_amber_rounded,
+    );
+  }
+  if (days <= 3) {
+    return _Urgency(
+      text: 'Expires in $days days',
+      color: AppColors.warning,
+      icon: Icons.schedule_outlined,
+    );
+  }
+  return _Urgency(
+    text: 'Fresh for $days days',
+    color: AppColors.primary,
+    icon: Icons.eco_outlined,
+  );
+}
+
+IconData _iconFor(String name) {
+  final key = name.toLowerCase();
+  if (key.contains('milk') ||
+      key.contains('cheese') ||
+      key.contains('yogurt')) {
+    return Icons.local_drink_outlined;
+  }
+  if (key.contains('chicken') ||
+      key.contains('beef') ||
+      key.contains('fish')) {
+    return Icons.set_meal_outlined;
+  }
+  if (key.contains('apple') ||
+      key.contains('tomato') ||
+      key.contains('onion') ||
+      key.contains('potato') ||
+      key.contains('lemon')) {
+    return Icons.eco_outlined;
+  }
+  if (key.contains('bread')) {
+    return Icons.bakery_dining_outlined;
+  }
+  return Icons.inventory_2_outlined;
+}
+
+double _defaultUsage(PantryItem item) {
+  final unit = item.unit.toLowerCase();
+  if (unit == 'kg' || unit == 'l') return 0.25;
+  if (unit == 'g' || unit == 'ml') return 100;
+  return 1;
+}
+
 String _formatQuantity(double value) {
   return value == value.roundToDouble()
       ? value.toInt().toString()
-      : value.toStringAsFixed(1);
+      : value.toStringAsFixed(2);
 }
 
 String _formatDate(DateTime value) {

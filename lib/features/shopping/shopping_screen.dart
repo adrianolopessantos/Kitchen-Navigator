@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../core/services/product_lookup_service.dart';
 import '../../core/state/app_scope.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/pantry_item.dart';
+import '../barcode/barcode_scanner_screen.dart';
 
 class ShoppingScreen extends StatefulWidget {
   const ShoppingScreen({super.key});
@@ -16,23 +19,23 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final allItems = state.shoppingItems;
+    final week = state.selectedShoppingWeek;
+    final allItems = state.selectedWeeklyShoppingItems;
     final filtered = allItems.where((item) {
       return item.name.toLowerCase().contains(
             query.trim().toLowerCase(),
           );
     }).toList();
 
-    final checkedCount = allItems.where((item) {
-      return state.isShoppingChecked(item.key);
-    }).length;
-    final progress = allItems.isEmpty
-        ? 0.0
-        : checkedCount / allItems.length;
+    final checkedCount = state.checkedShoppingCountForWeek(week);
+    final progress =
+        allItems.isEmpty ? 0.0 : checkedCount / allItems.length;
+    final estimatedTotal =
+        state.estimatedShoppingTotalForWeek(week);
+    final groups = <String, List<ShoppingItem>>{};
 
-    final grouped = <String, List<ShoppingItem>>{};
     for (final item in filtered) {
-      grouped.putIfAbsent(item.category, () => []).add(item);
+      groups.putIfAbsent(item.category, () => []).add(item);
     }
 
     return SafeArea(
@@ -47,27 +50,55 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
             ),
             sliver: SliverList.list(
               children: [
-                _ShoppingHeader(
+                _Header(
+                  week: week,
                   itemCount: allItems.length,
                   checkedCount: checkedCount,
                   progress: progress,
-                  estimatedTotal:
-                      state.estimatedShoppingTotal,
+                  estimatedTotal: estimatedTotal,
+                  weeklyBudget: state.weeklyShoppingBudget,
+                  monthlyTotal:
+                      state.estimatedMonthlyPlanShoppingTotal,
+                  onScan: () => _scanPurchasedProduct(context),
+                  onClear: () =>
+                      state.clearShoppingChecksForWeek(week),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
+                _WeekSelector(
+                  selectedWeek: week,
+                  weeks: state.shoppingWeeksInSelectedMonth,
+                  itemCountForWeek: (value) =>
+                      state.shoppingItemsForWeek(value).length,
+                  onSelected: state.selectShoppingWeek,
+                ),
+                const SizedBox(height: AppSpacing.md),
                 TextField(
                   onChanged: (value) =>
                       setState(() => query = value),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
-                    hintText: 'Search shopping list',
+                    hintText: 'Search this week’s list',
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                if (filtered.isEmpty)
-                  const _EmptyShopping()
+                if (state.monthlyMealPlan.entries.isEmpty)
+                  const _EmptyState(
+                    title: 'Create a monthly meal plan first',
+                    message:
+                        'The shopping list is built automatically from '
+                        'your monthly meals and pantry stock.',
+                    icon: Icons.calendar_month_outlined,
+                  )
+                else if (filtered.isEmpty)
+                  const _EmptyState(
+                    title: 'Nothing to buy this week',
+                    message:
+                        'Your pantry already covers the plan, or this '
+                        'week has no missing ingredients.',
+                    icon: Icons.shopping_cart_checkout_outlined,
+                  )
                 else
-                  ...grouped.entries.map(
+                  ...groups.entries.map(
                     (entry) => Padding(
                       padding: const EdgeInsets.only(
                         bottom: AppSpacing.lg,
@@ -85,36 +116,183 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       ),
     );
   }
+
+  Future<void> _scanPurchasedProduct(
+    BuildContext context,
+  ) async {
+    final state = AppScope.of(context);
+    final barcode = await openBarcodeScanner(context);
+
+    if (!mounted || barcode == null || barcode.trim().isEmpty) {
+      return;
+    }
+
+    final result =
+        await ProductLookupService.findByBarcode(barcode) ??
+            ProductLookupService.createFallback(barcode);
+
+    if (!mounted) return;
+
+    ShoppingItem? match;
+    final normalizedProduct = _normalize(result.name);
+
+    for (final item in state.selectedWeeklyShoppingItems) {
+      final normalizedItem = _normalize(item.name);
+      if (normalizedItem == normalizedProduct ||
+          normalizedItem.contains(normalizedProduct) ||
+          normalizedProduct.contains(normalizedItem)) {
+        match = item;
+        break;
+      }
+    }
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Barcode scanned'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              result.name,
+              style: const TextStyle(
+                color: AppColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            if (result.brand.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                result.brand,
+                style: const TextStyle(color: AppColors.muted),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text('Barcode: ${result.barcode}'),
+            Text('Store in: ${result.location.label}'),
+            const SizedBox(height: 12),
+            Text(
+              match == null
+                  ? 'No exact match was found in Week '
+                      '${state.selectedShoppingWeek}. The product can '
+                      'still be added to Pantry.'
+                  : 'Matches this week’s item: ${match.name}',
+              style: TextStyle(
+                color: match == null
+                    ? AppColors.warning
+                    : AppColors.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.add_shopping_cart),
+            label: const Text('Add to pantry'),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted != true || !mounted) return;
+
+    final expiryDate = DateTime.now().add(
+      Duration(days: result.suggestedShelfLifeDays),
+    );
+
+    if (match != null) {
+      state.purchaseShoppingItem(
+        item: match,
+        location: result.location,
+        expiryDate: expiryDate,
+        barcode: result.barcode,
+      );
+      if (!state.isShoppingChecked(match.key)) {
+        state.toggleShoppingChecked(match.key);
+      }
+    } else {
+      state.addPantryItem(
+        name: result.name,
+        quantity: result.defaultQuantity,
+        unit: result.defaultUnit,
+        location: result.location,
+        expiryDate: expiryDate,
+        barcode: result.barcode,
+      );
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${result.name} added to Pantry.'),
+      ),
+    );
+  }
 }
 
-class _ShoppingHeader extends StatelessWidget {
-  const _ShoppingHeader({
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.week,
     required this.itemCount,
     required this.checkedCount,
     required this.progress,
     required this.estimatedTotal,
+    required this.weeklyBudget,
+    required this.monthlyTotal,
+    required this.onScan,
+    required this.onClear,
   });
 
+  final int week;
   final int itemCount;
   final int checkedCount;
   final double progress;
   final double estimatedTotal;
+  final double weeklyBudget;
+  final double monthlyTotal;
+  final VoidCallback onScan;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     final remaining = itemCount - checkedCount;
+    final overBudget = estimatedTotal > weeklyBudget;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Shopping',
-          style: Theme.of(context).textTheme.headlineLarge,
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Grouped by aisle and ready to check off',
-          style: TextStyle(color: AppColors.muted),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Smart shopping',
+                    style:
+                        Theme.of(context).textTheme.headlineLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Weekly lists from your monthly plan and pantry',
+                    style: TextStyle(color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: onScan,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan'),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.lg),
         Container(
@@ -158,10 +336,10 @@ class _ShoppingHeader extends StatelessWidget {
                           CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$remaining item${remaining == 1 ? '' : 's'} remaining',
+                          'Week $week · $remaining remaining',
                           style: const TextStyle(
                             color: AppColors.text,
-                            fontSize: 21,
+                            fontSize: 20,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -177,8 +355,10 @@ class _ShoppingHeader extends StatelessWidget {
                   ),
                   Text(
                     '€${estimatedTotal.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: AppColors.terracotta,
+                    style: TextStyle(
+                      color: overBudget
+                          ? AppColors.danger
+                          : AppColors.terracotta,
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
                     ),
@@ -191,10 +371,114 @@ class _ShoppingHeader extends StatelessWidget {
                 minHeight: 10,
                 color: AppColors.terracotta,
               ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: _BudgetStat(
+                      label: 'Weekly budget',
+                      value: '€${weeklyBudget.toStringAsFixed(2)}',
+                      warning: overBudget,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _BudgetStat(
+                      label: 'Month estimate',
+                      value: '€${monthlyTotal.toStringAsFixed(2)}',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Reset Week $week checks',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.restart_alt),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BudgetStat extends StatelessWidget {
+  const _BudgetStat({
+    required this.label,
+    required this.value,
+    this.warning = false,
+  });
+
+  final String label;
+  final String value;
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .06),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: TextStyle(
+              color:
+                  warning ? AppColors.danger : AppColors.text,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekSelector extends StatelessWidget {
+  const _WeekSelector({
+    required this.selectedWeek,
+    required this.weeks,
+    required this.itemCountForWeek,
+    required this.onSelected,
+  });
+
+  final int selectedWeek;
+  final int weeks;
+  final int Function(int) itemCountForWeek;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 43,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: weeks,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final week = index + 1;
+          return ChoiceChip(
+            selected: selectedWeek == week,
+            onSelected: (_) => onSelected(week),
+            label: Text(
+              'Week $week · ${itemCountForWeek(week)}',
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -253,8 +537,12 @@ class _ShoppingCategory extends StatelessWidget {
               return Column(
                 children: [
                   Dismissible(
-                    key: ValueKey('$title-${item.key}'),
+                    key: ValueKey(item.key),
                     direction: DismissDirection.startToEnd,
+                    confirmDismiss: (_) async {
+                      state.toggleShoppingChecked(item.key);
+                      return false;
+                    },
                     background: Container(
                       alignment: Alignment.centerLeft,
                       padding: const EdgeInsets.symmetric(
@@ -279,60 +567,49 @@ class _ShoppingCategory extends StatelessWidget {
                         ],
                       ),
                     ),
-                    confirmDismiss: (_) async {
-                      state.toggleShoppingChecked(item.key);
-                      return false;
-                    },
-                    child: AnimatedContainer(
-                      duration:
-                          const Duration(milliseconds: 180),
-                      color: checked
-                          ? AppColors.primary
-                              .withValues(alpha: .06)
-                          : Colors.transparent,
-                      child: CheckboxListTile(
-                        value: checked,
-                        onChanged: (_) =>
-                            state.toggleShoppingChecked(item.key),
-                        secondary: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: _categoryColor(title)
-                                .withValues(alpha: .12),
-                            borderRadius:
-                                BorderRadius.circular(14),
-                          ),
-                          child: Icon(
-                            _categoryIcon(title),
-                            color: _categoryColor(title),
-                            size: 21,
-                          ),
+                    child: CheckboxListTile(
+                      value: checked,
+                      onChanged: (_) =>
+                          state.toggleShoppingChecked(item.key),
+                      secondary: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: _categoryColor(title)
+                              .withValues(alpha: .12),
+                          borderRadius:
+                              BorderRadius.circular(14),
                         ),
-                        title: Text(
-                          item.name,
-                          style: TextStyle(
-                            color: checked
-                                ? AppColors.subtle
-                                : AppColors.text,
-                            fontWeight: FontWeight.w800,
-                            decoration: checked
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
+                        child: Icon(
+                          _categoryIcon(title),
+                          color: _categoryColor(title),
+                          size: 21,
                         ),
-                        subtitle: Text(
-                          '${_formatQuantity(item.quantity)} ${item.unit} · '
-                          '€${item.estimatedTotal.toStringAsFixed(2)}'
-                          '${item.recipeNames.isEmpty ? '' : ' · ${item.recipeNames.join(', ')}'}',
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 11,
-                          ),
-                        ),
-                        controlAffinity:
-                            ListTileControlAffinity.trailing,
                       ),
+                      title: Text(
+                        item.name,
+                        style: TextStyle(
+                          color: checked
+                              ? AppColors.subtle
+                              : AppColors.text,
+                          fontWeight: FontWeight.w800,
+                          decoration: checked
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${_quantity(item.quantity)} ${item.unit} · '
+                        '€${item.estimatedTotal.toStringAsFixed(2)}\n'
+                        '${item.recipeNames.take(3).join(', ')}',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      isThreeLine: true,
+                      controlAffinity:
+                          ListTileControlAffinity.trailing,
                     ),
                   ),
                   if (index < items.length - 1)
@@ -347,8 +624,16 @@ class _ShoppingCategory extends StatelessWidget {
   }
 }
 
-class _EmptyShopping extends StatelessWidget {
-  const _EmptyShopping();
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.title,
+    required this.message,
+    required this.icon,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -357,33 +642,22 @@ class _EmptyShopping extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceElevated,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.shopping_cart_checkout_outlined,
-                color: AppColors.primary,
-                size: 34,
-              ),
-            ),
+            Icon(icon, color: AppColors.primary, size: 46),
             const SizedBox(height: AppSpacing.md),
-            const Text(
-              'Shopping list complete',
-              style: TextStyle(
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
                 color: AppColors.text,
                 fontSize: 19,
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Missing ingredients from planned meals will appear here.',
+            const SizedBox(height: 7),
+            Text(
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.muted),
+              style: const TextStyle(color: AppColors.muted),
             ),
           ],
         ),
@@ -426,8 +700,16 @@ Color _categoryColor(String category) {
   }
 }
 
-String _formatQuantity(double value) {
+String _quantity(double value) {
   return value == value.roundToDouble()
       ? value.toInt().toString()
       : value.toStringAsFixed(1);
+}
+
+String _normalize(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), '')
+      .replaceAll(RegExp(r'\s+'), ' ');
 }

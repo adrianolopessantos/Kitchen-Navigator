@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/state/app_scope.dart';
-import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/monthly_meal_plan.dart';
 import '../../models/recipe.dart';
 
 class PlannerScreen extends StatelessWidget {
@@ -10,170 +10,154 @@ class PlannerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final month = state.selectedPlannerDate;
+    final daysInMonth =
+        DateTime(month.year, month.month + 1, 0).day;
+    final entries = state.monthlyMealsFor(month);
 
     return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Row(
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+            sliver: SliverList.list(
               children: [
-                const Expanded(
-                  child: Text(
-                    'Weekly meal plan',
-                    style: TextStyle(
-                      color: AppColors.text,
-                      fontSize: 27,
-                      fontWeight: FontWeight.w900,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Monthly meal plan',
+                            style: TextStyle(
+                              color: AppColors.text,
+                              fontSize: 27,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _monthLabel(month),
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      tooltip: 'Previous month',
+                      onPressed: () => state.changePlannerMonth(
+                        DateTime(month.year, month.month - 1),
+                      ),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton.filledTonal(
+                      tooltip: 'Next month',
+                      onPressed: () => state.changePlannerMonth(
+                        DateTime(month.year, month.month + 1),
+                      ),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _PlanSummary(
+                  people: state.householdPeople,
+                  daysInMonth: daysInMonth,
+                  plannedEntries: state.monthlyMealPlan.entries.length,
+                  weeklyPeriods: state.weeklyShoppingPeriods.length,
+                  onGenerate: state.generateMonthlyFoundation,
+                ),
+                if (state.lastMealGenerationSummary.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.psychology_alt_outlined,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text('Why this plan?'),
+                      subtitle: Text(
+                        state.lastMealGenerationSummary,
+                      ),
                     ),
                   ),
+                ],
+                const SizedBox(height: 18),
+                _CalendarGrid(
+                  month: month,
+                  selectedDate: state.selectedPlannerDate,
+                  entriesFor: state.monthlyMealsFor,
+                  onSelected: state.selectPlannerDate,
                 ),
-                TextButton(
-                  onPressed: () => state.clearDay(state.selectedDay),
-                  child: const Text('Clear day'),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 62,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: AppState.days.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final day = AppState.days[index];
-                final count = state.mealsFor(day).length;
-                return ChoiceChip(
-                  selected: day == state.selectedDay,
-                  onSelected: (_) => state.selectDay(day),
-                  label: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(day.substring(0, 3)),
-                      if (count > 0)
-                        Text(
-                          '$count meal${count == 1 ? '' : 's'}',
-                          style: const TextStyle(fontSize: 9),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
-              children: [
-                const Text(
-                  'SELECTED FOR',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  state.selectedDay,
-                  style: const TextStyle(
-                    color: AppColors.text,
-                    fontSize: 25,
-                    fontWeight: FontWeight.w900,
+                const SizedBox(height: 20),
+                _DayHeader(
+                  date: state.selectedPlannerDate,
+                  onClear: () =>
+                      state.clearMonthlyDay(state.selectedPlannerDate),
+                  onRegenerate: () =>
+                      state.regenerateMonthlyDay(
+                    state.selectedPlannerDate,
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (state.selectedMeals.isEmpty)
+                if (entries.isEmpty)
                   const Card(
                     child: Padding(
-                      padding: EdgeInsets.all(18),
+                      padding: EdgeInsets.all(20),
                       child: Text(
-                        'No meals selected. Choose a recipe below.',
+                        'No meals planned for this day yet.',
                         style: TextStyle(color: AppColors.muted),
                       ),
                     ),
                   )
                 else
-                  ...state.selectedMeals.map((meal) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    meal.recipe.name,
-                                    style: const TextStyle(
-                                      color: AppColors.text,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: () =>
-                                      state.toggleRecipe(state.selectedDay, meal.recipe),
-                                  icon: const Icon(Icons.close),
-                                ),
-                              ],
-                            ),
-                            const Text(
-                              'People',
-                              style: TextStyle(
-                                color: AppColors.muted,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: List.generate(8, (index) {
-                                final value = index + 1;
-                                return ChoiceChip(
-                                  selected: meal.people == value,
-                                  onSelected: (_) => state.setPeople(
-                                    state.selectedDay,
-                                    meal.recipe.id,
-                                    value,
-                                  ),
-                                  label: Text('$value'),
-                                );
-                              }),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                const SizedBox(height: 16),
-                TextField(
-                  onChanged: state.setSearch,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search recipes or ingredients',
+                  ...entries.map(
+                    (entry) => _MealEntryCard(entry: entry),
                   ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _showAddMeal(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add meal or snack'),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 22),
                 const Text(
-                  'Add a meal',
+                  'Weekly shopping periods',
                   style: TextStyle(
                     color: AppColors.text,
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 10),
-                ...state.filteredRecipes.map(
-                  (recipe) => _RecipePickerCard(recipe: recipe),
-                ),
+                const SizedBox(height: 8),
+                ...List.generate(5, (index) {
+                  final week = index + 1;
+                  final count =
+                      state.weeklyShoppingPeriods[week]?.length ?? 0;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        child: Text('$week'),
+                      ),
+                      title: Text('Week $week'),
+                      subtitle: Text(
+                        '$count planned meal${count == 1 ? '' : 's'}',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Regenerate Week $week',
+                        onPressed: () =>
+                            state.regenerateMonthlyWeek(week),
+                        icon: const Icon(Icons.refresh),
+                      ),
+                    ),
+                  );
+                }),
               ],
             ),
           ),
@@ -181,39 +165,460 @@ class PlannerScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _showAddMeal(BuildContext context) async {
+    final state = AppScope.of(context);
+    MealSlotType slot = state.activeMealSlots.isEmpty
+        ? MealSlotType.dinner
+        : state.activeMealSlots.first;
+    final simpleController = TextEditingController();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                18,
+                16,
+                MediaQuery.viewInsetsOf(context).bottom + 22,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Add to ${_shortDate(state.selectedPlannerDate)}',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<MealSlotType>(
+                      initialValue: slot,
+                      decoration: const InputDecoration(
+                        labelText: 'Meal slot',
+                      ),
+                      items: state.activeMealSlots
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setModalState(() => slot = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Simple food',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: simpleController,
+                      decoration: const InputDecoration(
+                        hintText: 'Fruit, yogurt, toast, leftovers...',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await state.addSimpleMonthlyMeal(
+                            date: state.selectedPlannerDate,
+                            slot: slot,
+                            name: simpleController.text,
+                          );
+                          if (sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
+                          }
+                        },
+                        icon: const Icon(Icons.apple_outlined),
+                        label: const Text('Add simple food'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Or choose a recipe',
+                      style: TextStyle(
+                        color: AppColors.text,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...state.recipes.take(12).map(
+                      (recipe) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(recipe.name),
+                        subtitle: Text(
+                          '${recipe.category} · ${recipe.totalMinutes} min',
+                        ),
+                        trailing: const Icon(Icons.add_circle_outline),
+                        onTap: () async {
+                          await state.addRecipeMonthlyMeal(
+                            date: state.selectedPlannerDate,
+                            slot: slot,
+                            recipe: recipe,
+                          );
+                          if (sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    simpleController.dispose();
+  }
 }
 
-class _RecipePickerCard extends StatelessWidget {
-  const _RecipePickerCard({required this.recipe});
+class _PlanSummary extends StatelessWidget {
+  const _PlanSummary({
+    required this.people,
+    required this.daysInMonth,
+    required this.plannedEntries,
+    required this.weeklyPeriods,
+    required this.onGenerate,
+  });
 
-  final Recipe recipe;
+  final int people;
+  final int daysInMonth;
+  final int plannedEntries;
+  final int weeklyPeriods;
+  final Future<void> Function() onGenerate;
 
   @override
   Widget build(BuildContext context) {
-    final state = AppScope.of(context);
-    final added = state.containsRecipe(state.selectedDay, recipe.id);
-    final minutes = (recipe.totalSeconds / 60).ceil();
-
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        title: Text(
-          recipe.name,
-          style: const TextStyle(
-            color: AppColors.text,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          '$minutes min · ${recipe.ingredients.length} ingredients',
-          style: const TextStyle(color: AppColors.muted),
-        ),
-        trailing: FilledButton(
-          onPressed: () => state.toggleRecipe(state.selectedDay, recipe),
-          child: Text(added ? 'Added' : 'Add'),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome,
+                  color: AppColors.primary,
+                  size: 30,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$daysInMonth days · $people people',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$plannedEntries planned',
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onGenerate,
+                icon: const Icon(Icons.calendar_month),
+                label: Text(
+                  plannedEntries == 0
+                      ? 'Create personalized monthly plan'
+                      : 'Regenerate all unlocked meals',
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _CalendarGrid extends StatelessWidget {
+  const _CalendarGrid({
+    required this.month,
+    required this.selectedDate,
+    required this.entriesFor,
+    required this.onSelected,
+  });
+
+  final DateTime month;
+  final DateTime selectedDate;
+  final List<MonthlyMealEntry> Function(DateTime) entriesFor;
+  final ValueChanged<DateTime> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = DateTime(month.year, month.month, 1);
+    final leading = first.weekday - 1;
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final cells = leading + days;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          children: [
+            const Row(
+              children: [
+                _Weekday('M'),
+                _Weekday('T'),
+                _Weekday('W'),
+                _Weekday('T'),
+                _Weekday('F'),
+                _Weekday('S'),
+                _Weekday('S'),
+              ],
+            ),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                childAspectRatio: .82,
+              ),
+              itemCount: cells,
+              itemBuilder: (context, index) {
+                if (index < leading) return const SizedBox.shrink();
+
+                final day = index - leading + 1;
+                final date = DateTime(month.year, month.month, day);
+                final selected =
+                    dateKeyFor(date) == dateKeyFor(selectedDate);
+                final count = entriesFor(date).length;
+
+                return InkWell(
+                  onTap: () => onSelected(date),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primary.withValues(alpha: .16)
+                          : null,
+                      borderRadius: BorderRadius.circular(12),
+                      border: selected
+                          ? Border.all(color: AppColors.primary)
+                          : null,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$day',
+                          style: TextStyle(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.text,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        if (count > 0)
+                          Text(
+                            '$count',
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 9,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Weekday extends StatelessWidget {
+  const _Weekday(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayHeader extends StatelessWidget {
+  const _DayHeader({
+    required this.date,
+    required this.onClear,
+    required this.onRegenerate,
+  });
+
+  final DateTime date;
+  final VoidCallback onClear;
+  final VoidCallback onRegenerate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            _fullDate(date),
+            style: const TextStyle(
+              color: AppColors.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Regenerate this day',
+          onPressed: onRegenerate,
+          icon: const Icon(Icons.refresh),
+        ),
+        TextButton(
+          onPressed: onClear,
+          child: const Text('Clear unlocked'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MealEntryCard extends StatelessWidget {
+  const _MealEntryCard({required this.entry});
+
+  final MonthlyMealEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppScope.of(context);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 9),
+      child: ListTile(
+        leading: Icon(
+          entry.simpleFood
+              ? Icons.apple_outlined
+              : Icons.restaurant_menu,
+          color: AppColors.primary,
+        ),
+        title: Text(
+          entry.name,
+          style: const TextStyle(
+            color: AppColors.text,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        subtitle: Text(
+          '${entry.slot.label} · ${entry.servings} '
+          'serving${entry.servings == 1 ? '' : 's'}'
+          '${entry.suggestionReason.isEmpty ? '' : '\n${entry.suggestionReason}'}',
+        ),
+        isThreeLine: entry.suggestionReason.isNotEmpty,
+        trailing: Wrap(
+          spacing: 2,
+          children: [
+            IconButton(
+              tooltip: 'Regenerate this meal',
+              onPressed: entry.locked
+                  ? null
+                  : () => state.regenerateMonthlyMeal(entry),
+              icon: const Icon(Icons.refresh),
+            ),
+            IconButton(
+              tooltip: entry.locked ? 'Unlock' : 'Lock',
+              onPressed: () =>
+                  state.toggleMonthlyMealLock(entry.id),
+              icon: Icon(
+                entry.locked
+                    ? Icons.lock
+                    : Icons.lock_open_outlined,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove',
+              onPressed: () => state.removeMonthlyMeal(entry.id),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _monthLabel(DateTime value) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[value.month - 1]} ${value.year}';
+}
+
+String _shortDate(DateTime value) {
+  return '${value.day}/${value.month}/${value.year}';
+}
+
+String _fullDate(DateTime value) {
+  const weekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  return '${weekdays[value.weekday - 1]}, ${value.day}/${value.month}';
 }
