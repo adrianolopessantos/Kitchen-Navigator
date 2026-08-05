@@ -7,6 +7,7 @@ import 'features/pantry/pantry_screen.dart';
 import 'features/planner/planner_screen.dart';
 import 'features/recipes/recipes_screen.dart';
 import 'features/shopping/shopping_screen.dart';
+import 'features/family/household_setup_screen.dart';
 
 class KitchenNavigatorApp extends StatefulWidget {
   const KitchenNavigatorApp({super.key});
@@ -61,6 +62,10 @@ class _AppLoadingGate extends StatelessWidget {
           ),
         ),
       );
+    }
+
+    if (!state.householdSetupComplete) {
+      return const HouseholdSetupScreen();
     }
 
     return const AppShell();

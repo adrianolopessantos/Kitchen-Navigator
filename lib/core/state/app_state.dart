@@ -8,6 +8,8 @@ import '../../models/kitchen_profile.dart';
 import '../../models/nutrition.dart';
 import '../services/nutrition_service.dart';
 import '../../models/recipe.dart';
+import '../../models/household_profile.dart';
+import '../services/household_profile_service.dart';
 import '../../data/essential_recipe_library.dart';
 
 class PlannedMeal {
@@ -48,6 +50,13 @@ class AppState extends ChangeNotifier {
   }
 
   bool dataLoaded = false;
+  HouseholdProfile householdProfile = HouseholdProfile.initial();
+
+  bool get householdSetupComplete =>
+      householdProfile.setupComplete;
+
+  int get householdPeople =>
+      householdProfile.people == 0 ? 1 : householdProfile.people;
 
   static const days = [
     'Monday',
@@ -486,6 +495,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadSavedData() async {
     final preferences = await SharedPreferences.getInstance();
+    householdProfile = await HouseholdProfileService.load();
 
     final profilesJson = preferences.getString(_profilesStorageKey);
     if (profilesJson != null && profilesJson.isNotEmpty) {
@@ -623,6 +633,14 @@ class AppState extends ChangeNotifier {
         _plan[day]?.clear();
       }
     }
+  }
+
+  Future<void> saveHouseholdProfile(
+    HouseholdProfile profile,
+  ) async {
+    householdProfile = profile;
+    await HouseholdProfileService.save(profile);
+    notifyListeners();
   }
 
   Future<void> _saveKitchenProfiles() async {
@@ -779,7 +797,9 @@ class AppState extends ChangeNotifier {
     await preferences.remove(_shoppingChecksStorageKey);
     await preferences.remove(_equipmentStorageKey);
     await preferences.remove(_temperatureUnitStorageKey);
+    await HouseholdProfileService.clear();
 
+    householdProfile = HouseholdProfile.initial();
     pantryItems.clear();
     checkedShoppingItems.clear();
     kitchenAppliances.clear();
@@ -925,6 +945,8 @@ class AppState extends ChangeNotifier {
       'expiringSoon': expiringSoonCount,
       'lowStockItems': lowStockItems.length,
       'dataLoaded': dataLoaded,
+      'householdSetupComplete': householdSetupComplete,
+      'householdMembers': householdProfile.members.length,
     };
   }
 

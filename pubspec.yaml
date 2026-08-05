@@ -1,7 +1,7 @@
 name: kitchen_navigator
 description: Kitchen Navigator 8.0 - Making Every Meal Easier
 publish_to: "none"
-version: 10.1.0+23
+version: 11.0.0-alpha.1+25
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

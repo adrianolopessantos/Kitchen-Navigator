@@ -8,6 +8,7 @@ import '../diagnostics/diagnostics_screen.dart';
 import '../nutrition/nutrition_screen.dart';
 import '../../models/nutrition.dart';
 import '../budget/budget_screen.dart';
+import '../family/household_setup_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -71,6 +72,23 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text('This device only'),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.groups_outlined,
+                  color: AppColors.primary,
+                ),
+                title: const Text('Household & family'),
+                subtitle: Text(
+                  '${state.householdProfile.members.length} member${state.householdProfile.members.length == 1 ? '' : 's'} · '
+                  '${state.householdProfile.mealsPerDay} meals + '
+                  '${state.householdProfile.snacksPerDay} snacks',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => openHouseholdSetup(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -157,7 +175,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 title: const Text('Reset Kitchen Navigator data'),
                 subtitle: const Text(
-                  'Removes pantry products, meal plans and shopping checks.',
+                  'Removes household setup, pantry products, meal plans and shopping checks.',
                 ),
                 onTap: () => _confirmReset(context),
               ),
@@ -176,7 +194,7 @@ class SettingsScreen extends StatelessWidget {
         return AlertDialog(
           title: const Text('Reset all local data?'),
           content: const Text(
-            'This cannot be undone. Your pantry, meal plan and shopping progress will be removed.',
+            'This cannot be undone. Your household profile, pantry, meal plan and shopping progress will be removed.',
           ),
           actions: [
             TextButton(
