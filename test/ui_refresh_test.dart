@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_navigator/app.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'test_household_fixture.dart';
 
 void main() {
   testWidgets('Visual refresh dashboard loads', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    mockCompletedHousehold();
 
     await tester.pumpWidget(const KitchenNavigatorApp());
     await tester.pumpAndSettle();
