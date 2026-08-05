@@ -13,14 +13,17 @@ void main() {
     await tester.tap(find.text('Pantry'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Everything stored in this kitchen'), findsOneWidget);
+    expect(find.text('Pantry intelligence'), findsOneWidget);
     expect(find.text('PANTRY HEALTH'), findsOneWidget);
 
     await tester.tap(find.text('Shopping'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Smart shopping'), findsOneWidget);
     expect(
-      find.text('Grouped by aisle and ready to check off'),
+      find.text(
+        'Weekly lists from your monthly plan and pantry',
+      ),
       findsOneWidget,
     );
   });
