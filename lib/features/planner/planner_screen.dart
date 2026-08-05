@@ -3,6 +3,8 @@ import '../../core/state/app_scope.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/monthly_meal_plan.dart';
 import '../../models/recipe.dart';
+import '../cooking/cooking_assistant_screen.dart';
+import '../cooking/cooking_feedback_screen.dart';
 
 class PlannerScreen extends StatelessWidget {
   const PlannerScreen({super.key});
@@ -556,37 +558,139 @@ class _MealEntryCard extends StatelessWidget {
           '${entry.suggestionReason.isEmpty ? '' : '\n${entry.suggestionReason}'}',
         ),
         isThreeLine: entry.suggestionReason.isNotEmpty,
-        trailing: Wrap(
-          spacing: 2,
-          children: [
-            IconButton(
-              tooltip: 'Regenerate this meal',
-              onPressed: entry.locked
-                  ? null
-                  : () => state.regenerateMonthlyMeal(entry),
-              icon: const Icon(Icons.refresh),
-            ),
-            IconButton(
-              tooltip: entry.locked ? 'Unlock' : 'Lock',
-              onPressed: () =>
-                  state.toggleMonthlyMealLock(entry.id),
-              icon: Icon(
-                entry.locked
-                    ? Icons.lock
-                    : Icons.lock_open_outlined,
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Meal actions',
+          onSelected: (value) async {
+            if (value == 'cook') {
+              await _openMealForCooking(context, entry);
+            } else if (value == 'regenerate') {
+              await state.regenerateMonthlyMeal(entry);
+            } else if (value == 'lock') {
+              await state.toggleMonthlyMealLock(entry.id);
+            } else if (value == 'remove') {
+              await state.removeMonthlyMeal(entry.id);
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'cook',
+              child: Row(
+                children: [
+                  Icon(
+                    entry.recipeId == null
+                        ? Icons.restaurant_outlined
+                        : Icons.soup_kitchen_outlined,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    entry.recipeId == null
+                        ? 'View meal'
+                        : 'Start cooking',
+                  ),
+                ],
               ),
             ),
-            IconButton(
-              tooltip: 'Remove',
-              onPressed: () => state.removeMonthlyMeal(entry.id),
-              icon: const Icon(Icons.close),
+            PopupMenuItem(
+              value: 'regenerate',
+              enabled: !entry.locked,
+              child: const Row(
+                children: [
+                  Icon(Icons.refresh),
+                  SizedBox(width: 10),
+                  Text('Regenerate meal'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'lock',
+              child: Row(
+                children: [
+                  Icon(
+                    entry.locked
+                        ? Icons.lock_open_outlined
+                        : Icons.lock_outline,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(entry.locked ? 'Unlock meal' : 'Lock meal'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'remove',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline),
+                  SizedBox(width: 10),
+                  Text('Remove meal'),
+                ],
+              ),
             ),
           ],
         ),
+        onTap: () => _openMealForCooking(context, entry),
       ),
     );
   }
 }
+
+
+Future<void> _openMealForCooking(
+  BuildContext context,
+  MonthlyMealEntry entry,
+) async {
+  final state = AppScope.of(context);
+
+  if (entry.recipeId == null) {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(entry.name),
+        content: Text(
+          '${entry.slot.label} · ${entry.servings} serving'
+          '${entry.servings == 1 ? '' : 's'}\n\n'
+          'This simple meal does not need guided recipe steps.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
+  Recipe? recipe;
+  for (final candidate in state.recipes) {
+    if (candidate.id == entry.recipeId) {
+      recipe = candidate;
+      break;
+    }
+  }
+
+  if (recipe == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'The recipe for ${entry.name} could not be found.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final completed = await openCookingAssistant(
+    context,
+    recipe,
+    servings: entry.servings,
+  );
+
+  if (completed == true && context.mounted) {
+    await openCookingFeedback(context, recipe);
+  }
+}
+
 
 String _monthLabel(DateTime value) {
   const months = [
