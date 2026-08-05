@@ -124,7 +124,13 @@ class CookingScreen extends StatelessWidget {
     );
 
     if (completed == true && context.mounted) {
+      final state = AppScope.of(context);
+      await state.applyRecipePantryUsage(
+        recipe,
+        servings: servings,
+      );
       await openCookingFeedback(context, recipe);
+      await state.refreshCookingFeedback();
     }
   }
 }

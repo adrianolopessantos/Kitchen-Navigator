@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../../models/household_profile.dart';
 import '../../models/kitchen_appliance.dart';
 import '../../models/monthly_meal_plan.dart';
+import '../../models/cooking_feedback.dart';
 import '../../models/pantry_item.dart';
 import '../../models/recipe.dart';
 
@@ -15,6 +16,7 @@ class MealPlanGenerationRequest {
     required this.appliances,
     required this.activeSlots,
     required this.existingEntries,
+    this.feedback = const [],
     this.targetDate,
     this.targetWeek,
     this.targetSlot,
@@ -27,6 +29,7 @@ class MealPlanGenerationRequest {
   final List<KitchenAppliance> appliances;
   final List<MealSlotType> activeSlots;
   final List<MonthlyMealEntry> existingEntries;
+  final List<CookingFeedback> feedback;
   final DateTime? targetDate;
   final int? targetWeek;
   final MealSlotType? targetSlot;
@@ -386,6 +389,30 @@ abstract final class MealPlanGeneratorService {
         reasons.add('fits the cooking-time limit');
       } else if (date.weekday <= DateTime.friday) {
         score -= 5;
+      }
+
+      final recipeFeedback = request.feedback
+          .where((value) => value.recipeId == recipe.id)
+          .toList();
+      if (recipeFeedback.isNotEmpty) {
+        final averageRating = recipeFeedback
+                .map((value) => value.rating)
+                .fold<int>(0, (total, value) => total + value) /
+            recipeFeedback.length;
+
+        if (averageRating >= 4.5) {
+          score += 8;
+          reasons.add('is a highly rated family favourite');
+        } else if (averageRating <= 2.5) {
+          score -= 10;
+        }
+
+        if (recipeFeedback.any((value) => value.tooSpicy)) {
+          score -= 4;
+        }
+        if (recipeFeedback.any((value) => value.tooSalty)) {
+          score -= 3;
+        }
       }
 
       if (recentRecipeIds.contains(recipe.id)) {

@@ -11,8 +11,10 @@ import '../../models/recipe.dart';
 import '../../models/household_profile.dart';
 import '../../models/monthly_meal_plan.dart';
 import '../../models/pantry_usage_event.dart';
+import '../../models/cooking_feedback.dart';
 import '../services/pantry_intelligence_service.dart';
 import '../services/meal_plan_generator_service.dart';
+import '../services/cooking_feedback_service.dart';
 import '../services/monthly_meal_plan_service.dart';
 import '../services/household_profile_service.dart';
 import '../../data/essential_recipe_library.dart';
@@ -91,6 +93,7 @@ class AppState extends ChangeNotifier {
 
   final List<PantryItem> pantryItems = [];
   final List<PantryUsageEvent> pantryUsageEvents = [];
+  final List<CookingFeedback> cookingFeedback = [];
   final Set<String> checkedShoppingItems = {};
   final List<KitchenAppliance> kitchenAppliances = [];
   TemperatureUnit temperatureUnit = TemperatureUnit.celsius;
@@ -825,6 +828,9 @@ class AppState extends ChangeNotifier {
     householdProfile = await HouseholdProfileService.load();
     monthlyMealPlan =
         await MonthlyMealPlanService.load(DateTime.now());
+    cookingFeedback
+      ..clear()
+      ..addAll(await CookingFeedbackService.load());
 
     final profilesJson = preferences.getString(_profilesStorageKey);
     if (profilesJson != null && profilesJson.isNotEmpty) {
@@ -1314,6 +1320,8 @@ class AppState extends ChangeNotifier {
       'householdMembers': householdProfile.members.length,
       'monthlyPlanEntries': monthlyMealPlan.entries.length,
       'mealGenerationSummary': lastMealGenerationSummary,
+      'cookingFeedbackCount': cookingFeedback.length,
+      'familyAverageMealRating': familyAverageMealRating,
       'monthlyShoppingItems': monthlyShoppingItems.length,
       'selectedShoppingWeek': selectedShoppingWeek,
     };
@@ -1522,6 +1530,7 @@ class AppState extends ChangeNotifier {
         appliances: kitchenAppliances,
         activeSlots: activeMealSlots,
         existingEntries: monthlyMealPlan.entries,
+        feedback: cookingFeedback,
         targetDate: targetDate,
         targetWeek: targetWeek,
         targetSlot: targetSlot,
@@ -1543,6 +1552,69 @@ class AppState extends ChangeNotifier {
       result.putIfAbsent(week, () => []).add(entry);
     }
     return result;
+  }
+
+
+  Future<void> refreshCookingFeedback() async {
+    cookingFeedback
+      ..clear()
+      ..addAll(await CookingFeedbackService.load());
+    notifyListeners();
+  }
+
+  List<MonthlyMealEntry> get todaysMonthlyMeals {
+    return monthlyMealsFor(DateTime.now());
+  }
+
+  int get todaysGuidedRecipeCount =>
+      todaysMonthlyMeals.where((entry) => entry.recipeId != null).length;
+
+  double get selectedShoppingWeekProgress {
+    final items = selectedWeeklyShoppingItems;
+    if (items.isEmpty) return 0;
+    return checkedShoppingCountForWeek(selectedShoppingWeek) /
+        items.length;
+  }
+
+  double get familyAverageMealRating {
+    if (cookingFeedback.isEmpty) return 0;
+    final total = cookingFeedback.fold<int>(
+      0,
+      (sum, value) => sum + value.rating,
+    );
+    return total / cookingFeedback.length;
+  }
+
+  Future<void> applyRecipePantryUsage(
+    Recipe recipe, {
+    required int servings,
+  }) async {
+    final scale = servings <= 0
+        ? 1.0
+        : servings / math.max(1, recipe.servings);
+
+    for (final ingredient in recipe.ingredients) {
+      final key = _normalize(ingredient);
+      PantryItem? match;
+
+      for (final item in pantryItems) {
+        final itemKey = _normalize(item.name);
+        if (itemKey == key ||
+            itemKey.contains(key) ||
+            key.contains(itemKey)) {
+          match = item;
+          break;
+        }
+      }
+
+      if (match == null) continue;
+
+      final amount = _defaultUsageAmount(match) * scale;
+      await consumePantryItem(
+        match.id,
+        quantity: amount.clamp(0.0, match.quantity).toDouble(),
+      );
+    }
   }
 
   void selectDay(String day) {

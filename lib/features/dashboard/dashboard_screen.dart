@@ -30,15 +30,32 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final meals = state.todayMeals;
-    final mealText = meals.isEmpty
+    final monthlyMeals = state.todaysMonthlyMeals;
+    final mealText = monthlyMeals.isEmpty
         ? 'Nothing planned yet'
-        : meals.map((meal) => meal.recipe.name).join(' + ');
-    final cookingMinutes = meals.fold<int>(
+        : monthlyMeals.map((meal) => meal.name).join(' + ');
+    final cookingMinutes = monthlyMeals.fold<int>(
       0,
-      (total, meal) =>
-          total + (meal.recipe.totalSeconds / 60).ceil(),
+      (total, meal) {
+        if (meal.recipeId == null) return total;
+        for (final recipe in state.recipes) {
+          if (recipe.id == meal.recipeId) {
+            return total + recipe.totalMinutes;
+          }
+        }
+        return total;
+      },
     );
+    final weeklyShopping = state.selectedWeeklyShoppingItems;
+    final shoppingRemaining = weeklyShopping
+        .where((item) => !state.isShoppingChecked(item.key))
+        .length;
+    final weeklyShoppingEstimate = state
+        .estimatedShoppingTotalForWeek(state.selectedShoppingWeek);
+    final monthlyShoppingEstimate =
+        state.estimatedMonthlyPlanShoppingTotal;
+    final weeklyBudget = state.weeklyShoppingBudget;
+    final monthlyBudget = state.householdProfile.monthlyBudget;
     final health = _overallHealth(state);
 
     return SafeArea(
@@ -64,7 +81,7 @@ class DashboardScreen extends StatelessWidget {
                   health: health,
                   mealText: mealText,
                   cookingMinutes: cookingMinutes,
-                  shoppingCount: state.shoppingItems.length,
+                  shoppingCount: shoppingRemaining,
                   expiryCount: state.useSoonItems.length,
                   onTap: () => openKitchenIntelligence(
                     context,
@@ -81,18 +98,12 @@ class DashboardScreen extends StatelessWidget {
                 _TodayMealCard(
                   day: state.todayName,
                   mealText: mealText,
-                  people: state.todayPeople,
-                  ingredients: state.requiredIngredients,
+                  people: state.householdPeople,
+                  ingredients: monthlyMeals.length,
                   cookingMinutes: cookingMinutes,
-                  hasMeal: meals.isNotEmpty,
+                  hasMeal: monthlyMeals.isNotEmpty,
                   onPlan: openPlanner,
-                  onCook: meals.isEmpty
-                      ? openPlanner
-                      : () => openCookingAssistant(
-                            context,
-                            meals.first.recipe,
-                            servings: meals.first.people,
-                          ),
+                  onCook: openPlanner,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 const _SectionHeader(
@@ -120,17 +131,17 @@ class DashboardScreen extends StatelessWidget {
                     DashboardCard(
                       icon: Icons.shopping_bag_outlined,
                       label: 'Shopping',
-                      value: '${state.shoppingItems.length} to buy',
+                      value: '$shoppingRemaining to buy',
                       note:
-                          '€${state.estimatedShoppingTotal.toStringAsFixed(2)} estimated',
+                          'Week ${state.selectedShoppingWeek} · €${weeklyShoppingEstimate.toStringAsFixed(2)} estimated',
                       accentColor: AppColors.terracotta,
                       onTap: openShopping,
                     ),
                     DashboardCard(
                       icon: Icons.menu_book_outlined,
                       label: 'Planner',
-                      value: '${meals.length} meal${meals.length == 1 ? '' : 's'} today',
-                      note: '${state.todayPeople} people',
+                      value: '${monthlyMeals.length} meal${monthlyMeals.length == 1 ? '' : 's'} today',
+                      note: '${state.householdPeople} people',
                       onTap: openPlanner,
                     ),
                     DashboardCard(
@@ -175,8 +186,9 @@ class DashboardScreen extends StatelessWidget {
                   icon: Icons.account_balance_wallet_outlined,
                   label: 'Budget',
                   value:
-                      '€${state.estimatedShoppingTotal.toStringAsFixed(2)} weekly list',
-                  note: 'Track monthly grocery spending',
+                      '€${weeklyShoppingEstimate.toStringAsFixed(2)} / €${weeklyBudget.toStringAsFixed(2)} this week',
+                  note:
+                      '€${monthlyShoppingEstimate.toStringAsFixed(2)} / €${monthlyBudget.toStringAsFixed(2)} monthly estimate',
                   wide: true,
                   accentColor: AppColors.warning,
                   onTap: () => openBudgetCenter(context),
@@ -205,8 +217,11 @@ class DashboardScreen extends StatelessWidget {
   }
 
   int _overallHealth(AppState state) {
-    final shoppingPenalty =
-        state.shoppingItems.length.clamp(0, 10) * 2;
+    final shoppingPenalty = state.selectedWeeklyShoppingItems
+            .where((item) => !state.isShoppingChecked(item.key))
+            .length
+            .clamp(0, 10) *
+        2;
     final expiryPenalty =
         state.expiredCount.clamp(0, 5) * 7;
     return (state.pantryHealthScore -
@@ -703,6 +718,134 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+
+class _IntegrationOverview extends StatelessWidget {
+  const _IntegrationOverview({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final meals = state.todaysMonthlyMeals;
+    final progress = state.selectedShoppingWeekProgress;
+    final rating = state.familyAverageMealRating;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Version 11 overview',
+          style: TextStyle(
+            color: AppColors.text,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.55,
+          children: [
+            _OverviewTile(
+              icon: Icons.calendar_month_outlined,
+              label: 'Today’s plan',
+              value: '${meals.length} meals',
+              detail:
+                  '${state.todaysGuidedRecipeCount} guided recipes',
+            ),
+            _OverviewTile(
+              icon: Icons.inventory_2_outlined,
+              label: 'Pantry risks',
+              value: '${state.wasteRiskItems.length}',
+              detail:
+                  '${state.restockSuggestedItems.length} restock suggestions',
+            ),
+            _OverviewTile(
+              icon: Icons.shopping_cart_outlined,
+              label: 'Shopping',
+              value: '${(progress * 100).round()}%',
+              detail:
+                  'Week ${state.selectedShoppingWeek} complete',
+            ),
+            _OverviewTile(
+              icon: Icons.star_outline,
+              label: 'Family rating',
+              value: rating == 0
+                  ? '—'
+                  : rating.toStringAsFixed(1),
+              detail: '${state.cookingFeedback.length} meals reviewed',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OverviewTile extends StatelessWidget {
+  const _OverviewTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    detail,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.subtle,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

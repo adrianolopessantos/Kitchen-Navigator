@@ -687,7 +687,12 @@ Future<void> _openMealForCooking(
   );
 
   if (completed == true && context.mounted) {
+    await state.applyRecipePantryUsage(
+      recipe,
+      servings: entry.servings,
+    );
     await openCookingFeedback(context, recipe);
+    await state.refreshCookingFeedback();
   }
 }
 
