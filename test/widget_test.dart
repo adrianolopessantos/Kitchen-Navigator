@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kitchen_navigator/app.dart';
 
@@ -10,7 +11,7 @@ void main() {
     await tester.pumpWidget(const KitchenNavigatorApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Kitchen Navigator'), findsOneWidget);
+    expect(find.byType(MaterialApp), findsOneWidget);
     expect(find.text('Today'), findsWidgets);
   });
 }

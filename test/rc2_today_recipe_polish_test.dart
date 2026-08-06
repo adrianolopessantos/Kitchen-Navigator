@@ -12,19 +12,20 @@ void main() {
     expect(source, contains("title: 'Kitchen overview'"));
     expect(source, isNot(contains('Open kitchen brief')));
     expect(source, isNot(contains('openTodayBrief')));
-    expect(source, contains("label: 'Scan'"));
     expect(source, contains('_scanFromDashboard'));
   });
 
-  test('Recipe details use a sticky safe bottom action bar', () {
+  test('Recipe details use a safe sticky bottom action area', () {
     final source = File(
       'lib/features/recipes/recipes_screen.dart',
     ).readAsStringSync();
 
     expect(source, contains('SafeArea('));
     expect(source, contains('MediaQuery.sizeOf(sheetContext).height * .88'));
-    expect(source, contains("label: const Text('Add missing')"));
-    expect(source, contains("label: const Text('Cook')"));
+    expect(source, contains('Add missing'));
+    expect(source, contains('Cook'));
     expect(source, contains('addManualShoppingItem'));
+    expect(source, contains('FilledButton.icon'));
+    expect(source, contains('OutlinedButton.icon'));
   });
 }

@@ -16,12 +16,21 @@ void main() {
       'lib/features/recipes/recipes_screen.dart',
     ).readAsStringSync();
 
-    expect(dashboard, contains('openTodayBrief'));
+    expect(dashboard, isNot(contains('openTodayBrief')));
+    expect(dashboard, contains('_scanFromDashboard'));
+
     expect(planner, contains('openShopping'));
     expect(planner, contains('shoppingItemsForWeek'));
-    expect(shopping, contains("label: Text('Month')"));
+    expect(planner, contains('selectShoppingWeek'));
+
+    expect(shopping, contains('SegmentedButton<bool>'));
+    expect(shopping, contains("'Month'"));
     expect(shopping, contains('setShoppingPurchased'));
+    expect(shopping, contains('setShoppingMonthView'));
+
     expect(recipes, contains('30 min or less'));
     expect(recipes, contains('No recipes match'));
+    expect(recipes, contains('Add missing'));
+    expect(recipes, contains('Cook'));
   });
 }

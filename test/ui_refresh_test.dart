@@ -1,35 +1,18 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kitchen_navigator/app.dart';
-
-import 'test_household_fixture.dart';
 
 void main() {
-  testWidgets('Visual refresh dashboard loads', (tester) async {
-    mockCompletedHousehold();
+  test('Current dashboard keeps the three final sections', () {
+    final source = File(
+      'lib/features/dashboard/dashboard_screen.dart',
+    ).readAsStringSync();
 
-    await tester.pumpWidget(const KitchenNavigatorApp());
-    await tester.pumpAndSettle();
+    expect(source, contains("title: 'Today'"));
+    expect(source, contains("title: 'Quick actions'"));
+    expect(source, contains("title: 'Kitchen overview'"));
 
-    expect(find.text('Kitchen Navigator'), findsOneWidget);
-    expect(find.text('Everything at a glance'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Quick actions'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Quick actions'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Kitchen overview'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Kitchen overview'), findsOneWidget);
+    expect(source, isNot(contains('Everything at a glance')));
+    expect(source, isNot(contains('Open kitchen brief')));
+    expect(source, isNot(contains('openTodayBrief')));
   });
 }

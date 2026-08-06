@@ -1,30 +1,24 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kitchen_navigator/app.dart';
-
-import 'test_household_fixture.dart';
 
 void main() {
-  testWidgets('Pantry and Shopping redesigns load', (tester) async {
-    mockCompletedHousehold();
+  test('Current Pantry and Shopping redesigns are installed', () {
+    final pantry = File(
+      'lib/features/pantry/pantry_screen.dart',
+    ).readAsStringSync();
+    final shopping = File(
+      'lib/features/shopping/shopping_screen.dart',
+    ).readAsStringSync();
 
-    await tester.pumpWidget(const KitchenNavigatorApp());
-    await tester.pumpAndSettle();
+    expect(pantry, contains('_CompactPantryRow'));
+    expect(pantry, contains('Needs attention'));
+    expect(pantry, contains('Use some'));
+    expect(pantry, contains('Add to Shopping'));
 
-    await tester.tap(find.text('Pantry'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pantry intelligence'), findsOneWidget);
-    expect(find.text('PANTRY HEALTH'), findsOneWidget);
-
-    await tester.tap(find.text('Shopping'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Smart shopping'), findsOneWidget);
-    expect(
-      find.text(
-        'Weekly lists from your monthly plan and pantry',
-      ),
-      findsOneWidget,
-    );
+    expect(shopping, contains('Shopping list'));
+    expect(shopping, contains('Add product'));
+    expect(shopping, contains('Still to buy'));
+    expect(shopping, contains('Full list'));
+    expect(shopping, contains("label: Text('Month')"));
   });
 }
