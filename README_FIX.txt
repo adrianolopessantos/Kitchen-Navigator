@@ -1,13 +1,18 @@
-Kitchen Navigator v11.0 RC1 - Shopping Price Visibility
+Kitchen Navigator v11.0 RC2.2 - Compact Pantry
 
-Adds:
-- Estimated total on every shopping row
-- Still-to-buy estimated cost in the header
-- Full-list estimated cost in the header
-- Purchased products remain included in the full-list total
-- Quantity changes update row and summary totals immediately
-- Product Details shows quantity × unit price = item total
-- Regression test for price visibility
+Changes:
+- Replaces large multi-button Pantry cards with compact rows
+- Shows only product, quantity, unit, location and expiry/status
+- Tap a row to open Product Details
+- Details contain Use some, Edit, Add to Shopping and Record as waste
+- Swipe left to delete
+- Undo after deletion
+- Search retained
+- Location filters retained
+- Adds sorting by Needs attention, Expiry, Name and Location
+- Reduces vertical space so large inventories are easier to scan
+- Adds SafeArea and keyboard-close protection to Pantry editor
+- Adds UI and state regression tests
 
 Install:
 1. Extract this ZIP.
@@ -17,18 +22,18 @@ Install:
    test
 3. Choose Replace all.
 4. Run:
+   C:\src\flutter\bin\flutter.bat analyze --no-fatal-infos --no-fatal-warnings
    C:\src\flutter\bin\flutter.bat test
    C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
 
 Phone test:
-- Change a product quantity using + or -.
-- Confirm its row total changes.
-- Confirm Still to buy and Full list update.
-- Mark a product purchased.
-- Confirm Still to buy decreases while Full list remains unchanged.
-- Open Product Details and confirm the calculation is shown.
+- Open Pantry with many products.
+- Confirm many more rows fit on screen.
+- Tap a product and test Use some, Edit and Add to Shopping.
+- Swipe a product left and test Undo.
+- Test Search, location filters and all sort options.
 
 After successful testing:
    git add lib test
-   git commit -m "Show shopping item and list totals"
+   git commit -m "Add compact RC2 pantry experience"
    git push
