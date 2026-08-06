@@ -2141,6 +2141,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void restorePantryItem(PantryItem item) {
+    final exists = pantryItems.any((value) => value.id == item.id);
+    if (!exists) {
+      pantryItems.add(item);
+      _savePantry();
+      notifyListeners();
+    }
+  }
+
   Future<void> updateShoppingItem(
     ShoppingItem item,
   ) async {

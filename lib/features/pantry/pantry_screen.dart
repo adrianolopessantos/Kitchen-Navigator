@@ -16,6 +16,7 @@ class PantryScreen extends StatefulWidget {
 class _PantryScreenState extends State<PantryScreen> {
   String query = '';
   StorageLocation? selectedLocation;
+  String sortMode = 'Attention';
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +32,24 @@ class _PantryScreenState extends State<PantryScreen> {
       return matchesQuery && matchesLocation;
     }).toList()
       ..sort((a, b) {
+        if (sortMode == 'Name') {
+          return a.name.toLowerCase().compareTo(
+                b.name.toLowerCase(),
+              );
+        }
+        if (sortMode == 'Location') {
+          final location = a.location.label.compareTo(
+            b.location.label,
+          );
+          if (location != 0) return location;
+          return a.name.compareTo(b.name);
+        }
+        if (sortMode == 'Expiry') {
+          final aDays = a.daysUntilExpiry(now) ?? 9999;
+          final bDays = b.daysUntilExpiry(now) ?? 9999;
+          return aDays.compareTo(bDays);
+        }
+
         final aInsight = state.pantryInsightFor(a);
         final bInsight = state.pantryInsightFor(b);
 
@@ -139,45 +158,271 @@ class _PantryScreenState extends State<PantryScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Text(
+                      '${filtered.length} product${filtered.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    const Spacer(),
+                    DropdownButton<String>(
+                      value: sortMode,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'Attention',
+                          child: Text('Needs attention'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Expiry',
+                          child: Text('Expiry'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Name',
+                          child: Text('Name'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Location',
+                          child: Text('Location'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => sortMode = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
                 if (filtered.isEmpty)
                   const _EmptyPantry()
                 else
                   ...filtered.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: AppSpacing.sm,
+                    (item) => _CompactPantryRow(
+                      item: item,
+                      insight: state.pantryInsightFor(item),
+                      onOpen: () => _showPantryDetails(
+                        context,
+                        item,
                       ),
-                      child: _PantryProductCard(
-                        item: item,
-                        insight: state.pantryInsightFor(item),
-                        onEdit: () => _showItemEditor(
-                          context,
-                          existing: item,
-                        ),
-                        onConsume: () =>
-                            _showConsumeDialog(context, item),
-                        onWaste: () =>
-                            _confirmWaste(context, item),
-                        onRestock: () async {
-                          await state
-                              .addSuggestedRestockToShopping(item);
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${item.name} marked for restocking.',
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                      onDelete: () =>
+                          _deletePantryWithUndo(context, item),
                     ),
                   ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _deletePantryWithUndo(
+    BuildContext context,
+    PantryItem item,
+  ) async {
+    final state = AppScope.of(context);
+    state.removePantryItem(item.id);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${item.name} removed from Pantry'),
+          action: SnackBarAction(
+            label: 'UNDO',
+            onPressed: () => state.restorePantryItem(item),
+          ),
+        ),
+      );
+  }
+
+  Future<void> _showPantryDetails(
+    BuildContext context,
+    PantryItem item,
+  ) async {
+    final state = AppScope.of(context);
+    final insight = state.pantryInsightFor(item);
+    final days = item.daysUntilExpiry(DateTime.now());
+    final urgency = _urgency(days);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.md,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: urgency.color.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(
+                        _iconFor(item.name),
+                        color: urgency.color,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium,
+                          ),
+                          Text(
+                            '${_formatQuantity(item.quantity)} '
+                            '${item.unit} · ${item.location.label}',
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Card(
+                  color: AppColors.surfaceElevated,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(
+                          Icons.event_outlined,
+                          color: AppColors.primary,
+                        ),
+                        title: const Text('Expiry'),
+                        trailing: Text(
+                          urgency.text,
+                          style: TextStyle(
+                            color: urgency.color,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(
+                          Icons.restaurant_menu,
+                          color: AppColors.primary,
+                        ),
+                        title: const Text('Planned uses'),
+                        trailing: Text(
+                          '${insight.plannedUses}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(
+                          Icons.timelapse_outlined,
+                          color: AppColors.primary,
+                        ),
+                        title: const Text('Estimated stock'),
+                        trailing: Text(
+                          '~${insight.estimatedDaysRemaining} days',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _showConsumeDialog(context, item);
+                        },
+                        icon: const Icon(Icons.restaurant),
+                        label: const Text('Use some'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          _showItemEditor(
+                            context,
+                            existing: item,
+                          );
+                        },
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Edit'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                if (insight.lowStock)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await state
+                            .addSuggestedRestockToShopping(item);
+                        if (!sheetContext.mounted) return;
+                        Navigator.pop(sheetContext);
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${item.name} added to Shopping.',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.add_shopping_cart),
+                      label: const Text('Add to Shopping'),
+                    ),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      _confirmWaste(context, item);
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Record as waste'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -282,6 +527,7 @@ class _PantryScreenState extends State<PantryScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.surface,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -461,9 +707,7 @@ class _PantryScreenState extends State<PantryScreen> {
       },
     );
 
-    nameController.dispose();
-    quantityController.dispose();
-    unitController.dispose();
+    // Keep modal controllers alive through the route-close animation.
   }
 }
 
@@ -757,199 +1001,134 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _PantryProductCard extends StatelessWidget {
-  const _PantryProductCard({
+class _CompactPantryRow extends StatelessWidget {
+  const _CompactPantryRow({
     required this.item,
     required this.insight,
-    required this.onEdit,
-    required this.onConsume,
-    required this.onWaste,
-    required this.onRestock,
+    required this.onOpen,
+    required this.onDelete,
   });
 
   final PantryItem item;
   final PantryItemInsight insight;
-  final VoidCallback onEdit;
-  final VoidCallback onConsume;
-  final VoidCallback onWaste;
-  final VoidCallback onRestock;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final days = item.daysUntilExpiry(DateTime.now());
     final urgency = _urgency(days);
+    final status = insight.lowStock
+        ? 'LOW'
+        : insight.wasteRisk
+            ? 'AT RISK'
+            : days != null && days <= 3
+                ? 'EXPIRING'
+                : '';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    color: urgency.color.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(17),
-                  ),
-                  child: Icon(
-                    _iconFor(item.name),
-                    color: urgency.color,
-                    size: 27,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.name,
-                        style: const TextStyle(
-                          color: AppColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${_formatQuantity(item.quantity)} ${item.unit} · '
-                        '~${insight.estimatedDaysRemaining} days remaining',
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit();
-                    if (value == 'waste') onWaste();
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Text('Edit'),
-                    ),
-                    PopupMenuItem(
-                      value: 'waste',
-                      child: Text('Record waste'),
-                    ),
-                  ],
-                ),
-              ],
+    return Dismissible(
+      key: ValueKey(item.id),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => onDelete(),
+      background: Container(
+        alignment: Alignment.centerRight,
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
+        decoration: BoxDecoration(
+          color: AppColors.danger,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(
+          Icons.delete_outline,
+          color: Colors.white,
+        ),
+      ),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 7),
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.fromLTRB(
+            12,
+            5,
+            10,
+            5,
+          ),
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: urgency.color.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _ProductBadge(
-                    icon: Icons.calendar_month_outlined,
-                    text:
-                        '${insight.plannedUses} planned use${insight.plannedUses == 1 ? '' : 's'}',
-                    color: insight.plannedUses > 0
-                        ? AppColors.primary
-                        : AppColors.muted,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _ProductBadge(
-                    icon: urgency.icon,
-                    text: urgency.text,
-                    color: urgency.color,
-                  ),
-                ),
-              ],
+            child: Icon(
+              _iconFor(item.name),
+              color: urgency.color,
+              size: 21,
             ),
-            if (insight.wasteRisk || insight.lowStock) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onConsume,
-                      icon: const Icon(Icons.restaurant),
-                      label: const Text('Record use'),
-                    ),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontWeight: FontWeight.w900,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed:
-                          insight.lowStock ? onRestock : onConsume,
-                      icon: Icon(
-                        insight.lowStock
-                            ? Icons.add_shopping_cart
-                            : Icons.eco_outlined,
-                      ),
-                      label: Text(
-                        insight.lowStock ? 'Restock' : 'Use soon',
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ] else ...[
-              const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onConsume,
-                  icon: const Icon(Icons.restaurant),
-                  label: const Text('Record product use'),
+              Text(
+                '${_formatQuantity(item.quantity)} ${item.unit}',
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProductBadge extends StatelessWidget {
-  const _ProductBadge({
-    required this.icon,
-    required this.text,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              text,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
           ),
-        ],
+          subtitle: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${item.location.label} · ${urgency.text}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              if (status.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: urgency.color.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(
+                      AppRadius.pill,
+                    ),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: urgency.color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          trailing: const Icon(
+            Icons.chevron_right,
+            color: AppColors.subtle,
+          ),
+          onTap: onOpen,
+        ),
       ),
     );
   }
