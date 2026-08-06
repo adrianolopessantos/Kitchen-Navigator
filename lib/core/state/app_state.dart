@@ -46,6 +46,7 @@ class ShoppingItem {
     required this.recipeNames,
     this.week = 1,
     this.sourceDateKeys = const [],
+    this.manual = false,
   });
 
   final String key;
@@ -57,8 +58,72 @@ class ShoppingItem {
   final List<String> recipeNames;
   final int week;
   final List<String> sourceDateKeys;
+  final bool manual;
 
   double get estimatedTotal => quantity * estimatedUnitPrice;
+
+  ShoppingItem copyWith({
+    String? name,
+    double? quantity,
+    String? unit,
+    String? category,
+    double? estimatedUnitPrice,
+    int? week,
+    bool? manual,
+  }) {
+    return ShoppingItem(
+      key: key,
+      name: name ?? this.name,
+      quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
+      category: category ?? this.category,
+      estimatedUnitPrice:
+          estimatedUnitPrice ?? this.estimatedUnitPrice,
+      recipeNames: recipeNames,
+      week: week ?? this.week,
+      sourceDateKeys: sourceDateKeys,
+      manual: manual ?? this.manual,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'key': key,
+        'name': name,
+        'quantity': quantity,
+        'unit': unit,
+        'category': category,
+        'estimatedUnitPrice': estimatedUnitPrice,
+        'recipeNames': recipeNames,
+        'week': week,
+        'sourceDateKeys': sourceDateKeys,
+        'manual': manual,
+      };
+
+  factory ShoppingItem.fromJson(Map<String, dynamic> json) {
+    return ShoppingItem(
+      key: json['key'] as String? ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      name: json['name'] as String? ?? 'Product',
+      quantity:
+          (json['quantity'] as num?)?.toDouble() ?? 1,
+      unit: json['unit'] as String? ?? 'each',
+      category: json['category'] as String? ?? 'Pantry',
+      estimatedUnitPrice:
+          (json['estimatedUnitPrice'] as num?)?.toDouble() ??
+              1,
+      recipeNames: (json['recipeNames'] as List<dynamic>? ??
+              const [])
+          .map((value) => value.toString())
+          .toList(),
+      week: (json['week'] as num?)?.toInt() ?? 1,
+      sourceDateKeys:
+          (json['sourceDateKeys'] as List<dynamic>? ??
+                  const [])
+              .map((value) => value.toString())
+              .toList(),
+      manual: json['manual'] as bool? ?? false,
+    );
+  }
 }
 
 class AppState extends ChangeNotifier {
@@ -104,6 +169,9 @@ class AppState extends ChangeNotifier {
   NotificationPreferences notificationPreferences =
       const NotificationPreferences();
   final Set<String> checkedShoppingItems = {};
+  final Map<String, ShoppingItem> shoppingOverrides = {};
+  final List<ShoppingItem> manualShoppingItems = [];
+  final Set<String> hiddenShoppingItems = {};
   final List<KitchenAppliance> kitchenAppliances = [];
   TemperatureUnit temperatureUnit = TemperatureUnit.celsius;
   final List<KitchenProfile> kitchenProfiles = [];
@@ -764,7 +832,33 @@ class AppState extends ChangeNotifier {
         return a.name.compareTo(b.name);
       });
 
-    return result;
+    final edited = result
+        .where((item) => !hiddenShoppingItems.contains(item.key))
+        .map((item) => shoppingOverrides[item.key] ?? item)
+        .toList();
+
+    edited.addAll(
+      manualShoppingItems.where(
+        (item) => !hiddenShoppingItems.contains(item.key),
+      ),
+    );
+
+    edited.sort((a, b) {
+      final weekCompare = a.week.compareTo(b.week);
+      if (weekCompare != 0) return weekCompare;
+      final checkedCompare =
+          isShoppingChecked(a.key) == isShoppingChecked(b.key)
+              ? 0
+              : isShoppingChecked(a.key)
+                  ? 1
+                  : -1;
+      if (checkedCompare != 0) return checkedCompare;
+      final categoryCompare = a.category.compareTo(b.category);
+      if (categoryCompare != 0) return categoryCompare;
+      return a.name.compareTo(b.name);
+    });
+
+    return edited;
   }
 
   List<ShoppingItem> shoppingItemsForWeek(int week) {
@@ -827,6 +921,8 @@ class AppState extends ChangeNotifier {
       'kitchen_navigator_${activeKitchenId}_pantry_usage_v11';
   String get _shoppingChecksStorageKey =>
       'kitchen_navigator_${activeKitchenId}_shopping_checks_v1';
+  String get _shoppingEditsStorageKey =>
+      'kitchen_navigator_${activeKitchenId}_shopping_edits_v11';
   String get _equipmentStorageKey =>
       'kitchen_navigator_${activeKitchenId}_equipment_v1';
   String get _temperatureUnitStorageKey =>
@@ -897,6 +993,9 @@ class AppState extends ChangeNotifier {
     pantryItems.clear();
     pantryUsageEvents.clear();
     checkedShoppingItems.clear();
+    shoppingOverrides.clear();
+    manualShoppingItems.clear();
+    hiddenShoppingItems.clear();
     kitchenAppliances.clear();
     for (final day in days) {
       _plan[day]?.clear();
@@ -972,6 +1071,38 @@ class AppState extends ChangeNotifier {
             const <String>[],
       );
 
+      final shoppingEditsJson =
+          preferences.getString(_shoppingEditsStorageKey);
+      if (shoppingEditsJson != null &&
+          shoppingEditsJson.isNotEmpty) {
+        final decoded = Map<String, dynamic>.from(
+          jsonDecode(shoppingEditsJson) as Map,
+        );
+
+        final overrides =
+            decoded['overrides'] as List<dynamic>? ?? const [];
+        for (final value in overrides) {
+          final item = ShoppingItem.fromJson(
+            Map<String, dynamic>.from(value as Map),
+          );
+          shoppingOverrides[item.key] = item;
+        }
+
+        manualShoppingItems.addAll(
+          (decoded['manual'] as List<dynamic>? ?? const [])
+              .map(
+                (value) => ShoppingItem.fromJson(
+                  Map<String, dynamic>.from(value as Map),
+                ),
+              ),
+        );
+
+        hiddenShoppingItems.addAll(
+          (decoded['hidden'] as List<dynamic>? ?? const [])
+              .map((value) => value.toString()),
+        );
+      }
+
       final equipmentJson =
           preferences.getString(_equipmentStorageKey);
       if (equipmentJson != null && equipmentJson.isNotEmpty) {
@@ -995,6 +1126,9 @@ class AppState extends ChangeNotifier {
       pantryItems.clear();
       pantryUsageEvents.clear();
       checkedShoppingItems.clear();
+      shoppingOverrides.clear();
+      manualShoppingItems.clear();
+      hiddenShoppingItems.clear();
       kitchenAppliances.clear();
       for (final day in days) {
         _plan[day]?.clear();
@@ -1087,6 +1221,9 @@ class AppState extends ChangeNotifier {
       'kitchen_navigator_${id}_shopping_checks_v1',
     );
     await preferences.remove(
+      'kitchen_navigator_${id}_shopping_edits_v11',
+    );
+    await preferences.remove(
       'kitchen_navigator_${id}_equipment_v1',
     );
     await preferences.remove(
@@ -1170,12 +1307,27 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  Future<void> _saveShoppingEdits() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _shoppingEditsStorageKey,
+      jsonEncode({
+        'overrides':
+            shoppingOverrides.values.map((item) => item.toJson()).toList(),
+        'manual':
+            manualShoppingItems.map((item) => item.toJson()).toList(),
+        'hidden': hiddenShoppingItems.toList(),
+      }),
+    );
+  }
+
   Future<void> clearAllSavedData() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_pantryStorageKey);
     await preferences.remove(_pantryUsageStorageKey);
     await preferences.remove(_plannerStorageKey);
     await preferences.remove(_shoppingChecksStorageKey);
+    await preferences.remove(_shoppingEditsStorageKey);
     await preferences.remove(_equipmentStorageKey);
     await preferences.remove(_temperatureUnitStorageKey);
     await HouseholdProfileService.clear();
@@ -1187,6 +1339,9 @@ class AppState extends ChangeNotifier {
     pantryItems.clear();
     pantryUsageEvents.clear();
     checkedShoppingItems.clear();
+    shoppingOverrides.clear();
+    manualShoppingItems.clear();
+    hiddenShoppingItems.clear();
     kitchenAppliances.clear();
     temperatureUnit = TemperatureUnit.celsius;
     for (final day in days) {
@@ -1343,6 +1498,8 @@ class AppState extends ChangeNotifier {
       'nutritionCalories': todaysNutrition.calories,
       'budgetForecastStatus': budgetForecast.projectedStatus,
       'monthlyShoppingItems': monthlyShoppingItems.length,
+      'manualShoppingItems': manualShoppingItems.length,
+      'shoppingOverrides': shoppingOverrides.length,
       'selectedShoppingWeek': selectedShoppingWeek,
     };
   }
@@ -1902,6 +2059,91 @@ class AppState extends ChangeNotifier {
     pantryItems.removeWhere((item) => item.id == id);
     _savePantry();
     notifyListeners();
+  }
+
+  Future<void> updateShoppingItem(
+    ShoppingItem item,
+  ) async {
+    if (item.manual) {
+      final index = manualShoppingItems.indexWhere(
+        (value) => value.key == item.key,
+      );
+      if (index >= 0) {
+        manualShoppingItems[index] = item;
+      }
+    } else {
+      shoppingOverrides[item.key] = item;
+    }
+    await _saveShoppingEdits();
+    notifyListeners();
+  }
+
+  Future<void> addManualShoppingItem({
+    required String name,
+    required double quantity,
+    required String unit,
+    required String category,
+    required int week,
+    double estimatedUnitPrice = 1,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || quantity <= 0) return;
+
+    manualShoppingItems.add(
+      ShoppingItem(
+        key:
+            'manual-${DateTime.now().microsecondsSinceEpoch}',
+        name: trimmed,
+        quantity: quantity,
+        unit: unit.trim().isEmpty ? 'each' : unit.trim(),
+        category: category,
+        estimatedUnitPrice:
+            estimatedUnitPrice.clamp(0.0, 10000).toDouble(),
+        recipeNames: const [],
+        week: week.clamp(1, shoppingWeeksInSelectedMonth),
+        manual: true,
+      ),
+    );
+    await _saveShoppingEdits();
+    notifyListeners();
+  }
+
+  Future<void> removeShoppingItem(String key) async {
+    hiddenShoppingItems.add(key);
+    checkedShoppingItems.remove(key);
+    await _saveShoppingEdits();
+    await _saveShoppingChecks();
+    notifyListeners();
+  }
+
+  Future<void> restoreShoppingItem(String key) async {
+    hiddenShoppingItems.remove(key);
+    await _saveShoppingEdits();
+    notifyListeners();
+  }
+
+  double shoppingQuantityStep(ShoppingItem item) {
+    switch (item.unit.trim().toLowerCase()) {
+      case 'kg':
+      case 'l':
+        return .1;
+      case 'g':
+      case 'ml':
+        return 50;
+      default:
+        return 1;
+    }
+  }
+
+  Future<void> changeShoppingQuantity(
+    ShoppingItem item,
+    double delta,
+  ) async {
+    final updated = item.copyWith(
+      quantity:
+          (item.quantity + delta).clamp(.01, 100000).toDouble(),
+    );
+    await updateShoppingItem(updated);
   }
 
   void toggleShoppingChecked(String key) {
