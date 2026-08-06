@@ -1,15 +1,13 @@
-Kitchen Navigator v11.0 Beta 1 - Dashboard Live Data Sync Fix
+Kitchen Navigator v11.0 RC1 - Shopping Price Visibility
 
-Fixes:
-- Main-page Shopping card now uses the selected Version 11 shopping week
-- Purchased products are excluded from the remaining count
-- Shopping estimate updates from the monthly plan
-- Budget card shows current weekly estimate versus weekly budget
-- Budget note shows monthly estimate versus household monthly budget
-- Planner card uses today's Version 11 monthly-plan entries
-- Hero shopping count uses live remaining products
-- Overall health uses live outstanding shopping count
-- Adds a regression test preventing legacy values from returning
+Adds:
+- Estimated total on every shopping row
+- Still-to-buy estimated cost in the header
+- Full-list estimated cost in the header
+- Purchased products remain included in the full-list total
+- Quantity changes update row and summary totals immediately
+- Product Details shows quantity × unit price = item total
+- Regression test for price visibility
 
 Install:
 1. Extract this ZIP.
@@ -22,14 +20,15 @@ Install:
    C:\src\flutter\bin\flutter.bat test
    C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
 
-Test:
-- Change the household monthly budget.
-- Add/regenerate monthly meals.
-- Open Shopping and mark products purchased.
-- Return to Dashboard.
-- Confirm Shopping count, weekly estimate and Budget update.
+Phone test:
+- Change a product quantity using + or -.
+- Confirm its row total changes.
+- Confirm Still to buy and Full list update.
+- Mark a product purchased.
+- Confirm Still to buy decreases while Full list remains unchanged.
+- Open Product Details and confirm the calculation is shown.
 
 After successful testing:
    git add lib test
-   git commit -m "Synchronize dashboard with Version 11 live data"
+   git commit -m "Show shopping item and list totals"
    git push
