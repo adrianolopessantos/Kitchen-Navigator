@@ -63,6 +63,7 @@ class ShoppingItem {
   double get estimatedTotal => quantity * estimatedUnitPrice;
 
   ShoppingItem copyWith({
+    String? key,
     String? name,
     double? quantity,
     String? unit,
@@ -72,7 +73,7 @@ class ShoppingItem {
     bool? manual,
   }) {
     return ShoppingItem(
-      key: key,
+      key: key ?? this.key,
       name: name ?? this.name,
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
@@ -138,6 +139,7 @@ class AppState extends ChangeNotifier {
   DateTime selectedPlannerDate =
       normalizedDate(DateTime.now());
   int selectedShoppingWeek = 1;
+  bool shoppingMonthView = false;
   String lastMealGenerationSummary = '';
 
   bool get householdSetupComplete =>
@@ -867,6 +869,59 @@ class AppState extends ChangeNotifier {
         .toList();
   }
 
+
+  void setShoppingMonthView(bool value) {
+    shoppingMonthView = value;
+    notifyListeners();
+  }
+
+  bool isMonthlyPurchaseItem(ShoppingItem item) {
+    const monthlyCategories = {
+      'Pantry',
+      'Frozen',
+      'Household',
+      'Other',
+    };
+    return item.manual || monthlyCategories.contains(item.category);
+  }
+
+  List<ShoppingItem> get monthlyBulkShoppingItems {
+    final totals = <String, ShoppingItem>{};
+
+    for (final item in monthlyShoppingItems) {
+      if (!isMonthlyPurchaseItem(item)) continue;
+
+      final key =
+          '${_normalize(item.name)}|${item.unit}|${item.category}';
+      final current = totals[key];
+      if (current == null) {
+        totals[key] = item.copyWith(
+          key: 'bulk-${monthlyMealPlan.monthKey}-$key',
+          week: 0,
+        );
+      } else {
+        totals[key] = current.copyWith(
+          quantity: current.quantity + item.quantity,
+          estimatedUnitPrice: item.estimatedUnitPrice,
+        );
+      }
+    }
+
+    final result = totals.values.toList()
+      ..sort((a, b) {
+        final category =
+            a.category.compareTo(b.category);
+        if (category != 0) return category;
+        return a.name.compareTo(b.name);
+      });
+    return result;
+  }
+
+  List<ShoppingItem> get activeShoppingItems =>
+      shoppingMonthView
+          ? monthlyBulkShoppingItems
+          : selectedWeeklyShoppingItems;
+
   List<ShoppingItem> get selectedWeeklyShoppingItems =>
       shoppingItemsForWeek(selectedShoppingWeek);
 
@@ -1501,6 +1556,8 @@ class AppState extends ChangeNotifier {
       'manualShoppingItems': manualShoppingItems.length,
       'shoppingOverrides': shoppingOverrides.length,
       'selectedShoppingWeek': selectedShoppingWeek,
+      'shoppingMonthView': shoppingMonthView,
+      'monthlyBulkShoppingItems': monthlyBulkShoppingItems.length,
     };
   }
 
@@ -2030,18 +2087,41 @@ class AppState extends ChangeNotifier {
     DateTime? expiryDate,
     String? barcode,
   }) {
-    pantryItems.add(
-      PantryItem(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        name: name.trim(),
-        quantity: quantity,
-        unit: unit.trim(),
-        location: location,
-        expiryDate: expiryDate,
-        barcode: barcode?.trim().isEmpty == true ? null : barcode?.trim(),
-      ),
-    );
-    checkedShoppingItems.remove(_normalize(name));
+    final cleanName = name.trim();
+    final cleanUnit = unit.trim();
+    final key = _normalize(cleanName);
+
+    final existingIndex = pantryItems.indexWhere((item) {
+      return _normalize(item.name) == key &&
+          item.unit.trim().toLowerCase() ==
+              cleanUnit.toLowerCase() &&
+          item.location == location;
+    });
+
+    if (existingIndex >= 0) {
+      final existing = pantryItems[existingIndex];
+      pantryItems[existingIndex] = existing.copyWith(
+        quantity: existing.quantity + quantity,
+        expiryDate: expiryDate ?? existing.expiryDate,
+        barcode: barcode?.trim().isEmpty == true
+            ? existing.barcode
+            : barcode?.trim() ?? existing.barcode,
+      );
+    } else {
+      pantryItems.add(
+        PantryItem(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          name: cleanName,
+          quantity: quantity,
+          unit: cleanUnit,
+          location: location,
+          expiryDate: expiryDate,
+          barcode:
+              barcode?.trim().isEmpty == true ? null : barcode?.trim(),
+        ),
+      );
+    }
+
     _savePantry();
     _saveShoppingChecks();
     notifyListeners();
@@ -2155,6 +2235,40 @@ class AppState extends ChangeNotifier {
   }
 
   bool isShoppingChecked(String key) => checkedShoppingItems.contains(key);
+
+
+  Future<void> setShoppingPurchased(
+    ShoppingItem item,
+    bool purchased,
+  ) async {
+    final currentlyPurchased = isShoppingChecked(item.key);
+    if (purchased == currentlyPurchased) return;
+
+    if (purchased) {
+      purchaseShoppingItem(
+        item: item,
+        location: _defaultStorageForCategory(item.category),
+      );
+      checkedShoppingItems.add(item.key);
+    } else {
+      checkedShoppingItems.remove(item.key);
+    }
+
+    await _saveShoppingChecks();
+    notifyListeners();
+  }
+
+  StorageLocation _defaultStorageForCategory(String category) {
+    switch (category) {
+      case 'Dairy & Chilled':
+      case 'Meat & Fish':
+        return StorageLocation.fridge;
+      case 'Frozen':
+        return StorageLocation.freezer;
+      default:
+        return StorageLocation.pantry;
+    }
+  }
 
   void purchaseShoppingItem({
     required ShoppingItem item,

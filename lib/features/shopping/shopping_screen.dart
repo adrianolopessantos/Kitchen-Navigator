@@ -44,7 +44,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final week = state.selectedShoppingWeek;
-    final allItems = state.selectedWeeklyShoppingItems;
+    final allItems = state.activeShoppingItems;
 
     final filtered = allItems.where((item) {
       return item.name.toLowerCase().contains(
@@ -82,7 +82,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
             sliver: SliverList.list(
               children: [
                 _Header(
-                  week: week,
+                  week: state.shoppingMonthView ? 0 : week,
                   remaining: allItems.length - checkedCount,
                   purchased: checkedCount,
                   estimatedTotal: estimatedTotal,
@@ -92,7 +92,37 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                   onAdd: () => _showItemEditor(context),
                 ),
                 const SizedBox(height: 14),
-                _WeekSelector(
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.calendar_view_week_outlined),
+                      label: Text('Week'),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      icon: Icon(Icons.calendar_month_outlined),
+                      label: Text('Month'),
+                    ),
+                  ],
+                  selected: {state.shoppingMonthView},
+                  onSelectionChanged: (values) =>
+                      state.setShoppingMonthView(values.first),
+                ),
+                if (state.shoppingMonthView)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Month view combines shelf-stable, frozen and household products. Fresh food remains in weekly lists.',
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                if (!state.shoppingMonthView)
+                  _WeekSelector(
                   selectedWeek: week,
                   weeks: state.shoppingWeeksInSelectedMonth,
                   itemCountForWeek: (value) =>
@@ -191,6 +221,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.surface,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -436,9 +467,10 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       },
     );
 
-    nameController.dispose();
-    quantityController.dispose();
-    priceController.dispose();
+    // These controllers belong to the modal editor. Flutter can still
+    // rebuild the route briefly while the keyboard and sheet complete
+    // their closing animations, so disposing them here can cause a
+    // TextEditingController-used-after-dispose red screen.
   }
 
   Future<void> _scanPurchasedProduct(
@@ -539,7 +571,8 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Week $week · $remaining remaining · $purchased purchased',
+          '${week == 0 ? 'Month' : 'Week $week'} · '
+          '$remaining remaining · $purchased purchased',
           style: const TextStyle(color: AppColors.muted),
         ),
         const SizedBox(height: 13),
@@ -815,8 +848,11 @@ class _ShoppingItemRow extends StatelessWidget {
               children: [
                 Checkbox(
                   value: purchased,
-                  onChanged: (_) =>
-                      state.toggleShoppingChecked(item.key),
+                  onChanged: (value) =>
+                      state.setShoppingPurchased(
+                    item,
+                    value ?? false,
+                  ),
                 ),
                 Expanded(
                   child: Column(

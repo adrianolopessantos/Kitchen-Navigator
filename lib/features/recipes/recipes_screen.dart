@@ -7,12 +7,43 @@ import '../../models/pantry_item.dart';
 import '../../models/recipe.dart';
 import '../cooking/cooking_assistant_screen.dart';
 
-class RecipesScreen extends StatelessWidget {
+class RecipesScreen extends StatefulWidget {
   const RecipesScreen({super.key});
+
+  @override
+  State<RecipesScreen> createState() => _RecipesScreenState();
+}
+
+class _RecipesScreenState extends State<RecipesScreen> {
+  String category = 'All';
+  String sort = 'Recommended';
+  bool quickOnly = false;
 
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final categories = <String>{
+      'All',
+      ...state.recipes.map((recipe) => recipe.category),
+    }.toList();
+
+    final visible = state.filteredRecipes.where((recipe) {
+      if (category != 'All' && recipe.category != category) {
+        return false;
+      }
+      if (quickOnly && recipe.totalMinutes > 30) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (sort == 'Fastest') {
+      visible.sort(
+        (a, b) => a.totalMinutes.compareTo(b.totalMinutes),
+      );
+    } else if (sort == 'Name') {
+      visible.sort((a, b) => a.name.compareTo(b.name));
+    }
 
     return SafeArea(
       child: ListView(
@@ -39,10 +70,80 @@ class RecipesScreen extends StatelessWidget {
               hintText: 'Search recipes or ingredients',
             ),
           ),
-          const SizedBox(height: 14),
-          ...state.filteredRecipes.map(
-            (recipe) => _RecipeCard(recipe: recipe),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 42,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: categories.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final value = categories[index];
+                return ChoiceChip(
+                  selected: category == value,
+                  onSelected: (_) =>
+                      setState(() => category = value),
+                  label: Text(value),
+                );
+              },
+            ),
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              FilterChip(
+                selected: quickOnly,
+                onSelected: (value) =>
+                    setState(() => quickOnly = value),
+                avatar: const Icon(Icons.timer_outlined, size: 17),
+                label: const Text('30 min or less'),
+              ),
+              const Spacer(),
+              DropdownButton<String>(
+                value: sort,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Recommended',
+                    child: Text('Recommended'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Fastest',
+                    child: Text('Fastest'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Name',
+                    child: Text('Name'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => sort = value);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '${visible.length} recipe${visible.length == 1 ? '' : 's'}',
+            style: const TextStyle(color: AppColors.muted),
+          ),
+          const SizedBox(height: 8),
+          if (visible.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'No recipes match the selected filters.',
+                  style: TextStyle(color: AppColors.muted),
+                ),
+              ),
+            )
+          else
+            ...visible.map(
+              (recipe) => _RecipeCard(recipe: recipe),
+            ),
         ],
       ),
     );
@@ -149,17 +250,30 @@ class _RecipeCard extends StatelessWidget {
             final missing =
                 ingredients.where((item) => !item.available).toList();
 
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                18,
-                16,
-                MediaQuery.viewInsetsOf(sheetContext).bottom + 22,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom:
+                      MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                child: SizedBox(
+                  height:
+                      MediaQuery.sizeOf(sheetContext).height * .88,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(
+                            16,
+                            18,
+                            16,
+                            24,
+                          ),
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
                     Text(
                       recipe.name,
                       style: const TextStyle(
@@ -317,57 +431,86 @@ class _RecipeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: missing.isEmpty
-                                ? null
-                                : () {
-                                    for (final ingredient in missing) {
-                                      state.addPantryItem(
-                                        name: ingredient.name,
-                                        quantity: 0,
-                                        unit: ingredient.unit,
-                                        location: _suggestLocation(
-                                          ingredient.name,
-                                        ),
-                                      );
-                                    }
-                                    Navigator.pop(sheetContext);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '${missing.length} missing ingredient${missing.length == 1 ? '' : 's'} added to Shopping.',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                            icon: const Icon(
-                              Icons.shopping_cart_outlined,
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(
+                          16,
+                          10,
+                          16,
+                          10,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border(
+                            top: BorderSide(
+                              color: AppColors.border,
                             ),
-                            label: const Text('Add missing'),
                           ),
                         ),
-                        const SizedBox(width: 9),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () {
-                              Navigator.pop(sheetContext);
-                              openCookingAssistant(
-                                context,
-                                recipe,
-                                servings: people,
-                              );
-                            },
-                            icon: const Icon(Icons.play_arrow),
-                            label: const Text('Cook'),
-                          ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: missing.isEmpty
+                                    ? null
+                                    : () async {
+                                        for (final ingredient
+                                            in missing) {
+                                          await state
+                                              .addManualShoppingItem(
+                                            name: ingredient.name,
+                                            quantity:
+                                                ingredient.quantity,
+                                            unit: ingredient.unit,
+                                            category: 'Pantry',
+                                            week: state
+                                                .selectedShoppingWeek,
+                                          );
+                                        }
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              '${missing.length} missing ingredient'
+                                              '${missing.length == 1 ? '' : 's'} '
+                                              'added to Shopping.',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                icon: const Icon(
+                                  Icons.shopping_cart_outlined,
+                                ),
+                                label:
+                                    const Text('Add missing'),
+                              ),
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                  openCookingAssistant(
+                                    context,
+                                    recipe,
+                                    servings: people,
+                                  );
+                                },
+                                icon:
+                                    const Icon(Icons.play_arrow),
+                                label: const Text('Cook'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );

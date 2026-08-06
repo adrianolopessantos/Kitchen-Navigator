@@ -94,7 +94,7 @@ class _AppShellState extends State<AppShell> {
       ),
       const PantryScreen(),
       const RecipesScreen(),
-      const PlannerScreen(),
+      PlannerScreen(openShopping: () => openTab(4)),
       const ShoppingScreen(),
     ];
 

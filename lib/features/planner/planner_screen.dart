@@ -7,7 +7,12 @@ import '../cooking/cooking_assistant_screen.dart';
 import '../cooking/cooking_feedback_screen.dart';
 
 class PlannerScreen extends StatelessWidget {
-  const PlannerScreen({super.key});
+  const PlannerScreen({
+    super.key,
+    required this.openShopping,
+  });
+
+  final VoidCallback openShopping;
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +146,10 @@ class PlannerScreen extends StatelessWidget {
                   final week = index + 1;
                   final count =
                       state.weeklyShoppingPeriods[week]?.length ?? 0;
+                  final shoppingCount =
+                      state.shoppingItemsForWeek(week).length;
+                  final estimate =
+                      state.estimatedShoppingTotalForWeek(week);
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
@@ -149,8 +158,15 @@ class PlannerScreen extends StatelessWidget {
                       ),
                       title: Text('Week $week'),
                       subtitle: Text(
-                        '$count planned meal${count == 1 ? '' : 's'}',
+                        '$count planned meal${count == 1 ? '' : 's'} · '
+                        '$shoppingCount shopping item${shoppingCount == 1 ? '' : 's'} · '
+                        '€${estimate.toStringAsFixed(2)}',
                       ),
+                      onTap: () {
+                        state.selectShoppingWeek(week);
+                        state.setShoppingMonthView(false);
+                        openShopping();
+                      },
                       trailing: IconButton(
                         tooltip: 'Regenerate Week $week',
                         onPressed: () =>
