@@ -1,22 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../core/services/product_lookup_service.dart';
 import '../../core/state/app_scope.dart';
 import '../../core/state/app_state.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/dashboard_card.dart';
-import '../../core/widgets/knife_compass_logo.dart';
-import '../../models/nutrition.dart';
 import '../../models/pantry_item.dart';
-import '../../core/services/product_lookup_service.dart';
 import '../barcode/barcode_scanner_screen.dart';
 import '../budget/budget_screen.dart';
-import '../cooking/cooking_assistant_screen.dart';
 import '../expiry/expiry_screen.dart';
-import '../intelligence/ai_kitchen_screen.dart';
 import '../inventory/inventory_intelligence_screen.dart';
 import '../kitchens/kitchens_screen.dart';
 import '../nutrition/nutrition_screen.dart';
 import '../settings/settings_screen.dart';
-import '../notifications/notification_center_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
@@ -33,10 +27,12 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+    final now = DateTime.now();
     final monthlyMeals = state.todaysMonthlyMeals;
     final mealText = monthlyMeals.isEmpty
         ? 'Nothing planned yet'
         : monthlyMeals.map((meal) => meal.name).join(' + ');
+
     final cookingMinutes = monthlyMeals.fold<int>(
       0,
       (total, meal) {
@@ -49,17 +45,16 @@ class DashboardScreen extends StatelessWidget {
         return total;
       },
     );
+
     final weeklyShopping = state.selectedWeeklyShoppingItems;
     final shoppingRemaining = weeklyShopping
         .where((item) => !state.isShoppingChecked(item.key))
         .length;
-    final weeklyShoppingEstimate = state
-        .estimatedShoppingTotalForWeek(state.selectedShoppingWeek);
-    final monthlyShoppingEstimate =
-        state.estimatedMonthlyPlanShoppingTotal;
+    final shoppingEstimate = state.estimatedShoppingTotalForWeek(
+      state.selectedShoppingWeek,
+    );
     final weeklyBudget = state.weeklyShoppingBudget;
-    final monthlyBudget = state.householdProfile.monthlyBudget;
-    final health = _overallHealth(state);
+    final budgetRemaining = weeklyBudget - shoppingEstimate;
 
     return SafeArea(
       child: CustomScrollView(
@@ -69,77 +64,74 @@ class DashboardScreen extends StatelessWidget {
               AppSpacing.md,
               AppSpacing.sm,
               AppSpacing.md,
-              112,
+              116,
             ),
             sliver: SliverList.list(
               children: [
-                _Header(
+                _PremiumHeader(
+                  greeting: _greeting(now.hour),
+                  date: _friendlyDate(now),
                   kitchenName: state.activeKitchen.name,
                   kitchenCount: state.kitchenProfiles.length,
                   onKitchenTap: () => openKitchens(context),
                   onSettingsTap: () => openSettings(context),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SectionHeader(
+                const SizedBox(height: AppSpacing.xl),
+
+                const _SectionTitle(
+                  icon: Icons.explore_outlined,
+                  color: AppColors.today,
                   title: 'Today',
-                  subtitle: 'Your most important kitchen actions',
+                  subtitle: 'Your next kitchen priority',
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                _TodayMealCard(
+                _TodayFocusCard(
                   day: state.todayName,
                   mealText: mealText,
                   people: state.householdPeople,
-                  ingredients: monthlyMeals.length,
                   cookingMinutes: cookingMinutes,
                   hasMeal: monthlyMeals.isNotEmpty,
-                  onPlan: openPlanner,
-                  onCook: openPlanner,
+                  onOpenPlan: openPlanner,
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SectionHeader(
+
+                const SizedBox(height: AppSpacing.xl),
+                const _SectionTitle(
+                  icon: Icons.bolt_rounded,
+                  color: AppColors.bamboo,
                   title: 'Quick actions',
-                  subtitle: 'The things you use most often',
+                  subtitle: 'One tap to the things you use most',
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 GridView.count(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  childAspectRatio: 1.08,
-                  crossAxisSpacing: AppSpacing.sm,
-                  mainAxisSpacing: AppSpacing.sm,
+                  crossAxisCount: 4,
+                  crossAxisSpacing: AppSpacing.xs,
+                  mainAxisSpacing: AppSpacing.xs,
+                  childAspectRatio: .82,
                   children: [
-                    DashboardCard(
-                      icon: Icons.kitchen_outlined,
-                      label: 'Pantry',
-                      value: '${state.pantryCount} products',
-                      note: state.expiringSoonCount > 0
-                          ? '${state.expiringSoonCount} expiring soon'
-                          : 'Everything looks fresh',
-                      onTap: openPantry,
-                    ),
-                    DashboardCard(
-                      icon: Icons.shopping_bag_outlined,
-                      label: 'Shopping',
-                      value: '$shoppingRemaining to buy',
-                      note:
-                          'Week ${state.selectedShoppingWeek} · €${weeklyShoppingEstimate.toStringAsFixed(2)} estimated',
-                      accentColor: AppColors.terracotta,
-                      onTap: openShopping,
-                    ),
-                    DashboardCard(
-                      icon: Icons.menu_book_outlined,
-                      label: 'Planner',
-                      value: '${monthlyMeals.length} meal${monthlyMeals.length == 1 ? '' : 's'} today',
-                      note: '${state.householdPeople} people',
+                    _QuickAction(
+                      icon: Icons.calendar_month_outlined,
+                      label: 'Plan',
+                      color: AppColors.planner,
                       onTap: openPlanner,
                     ),
-                    DashboardCard(
-                      icon: Icons.qr_code_scanner,
+                    _QuickAction(
+                      icon: Icons.shopping_cart_outlined,
+                      label: 'Shop',
+                      color: AppColors.shopping,
+                      onTap: openShopping,
+                    ),
+                    _QuickAction(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Pantry',
+                      color: AppColors.pantry,
+                      onTap: openPantry,
+                    ),
+                    _QuickAction(
+                      icon: Icons.qr_code_scanner_rounded,
                       label: 'Scan',
-                      value: 'Product barcode',
-                      note: 'Purchase, pantry or shopping',
-                      accentColor: AppColors.warning,
+                      color: AppColors.today,
                       onTap: () => _scanFromDashboard(
                         context,
                         openShopping: openShopping,
@@ -148,61 +140,79 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SectionHeader(
+
+                const SizedBox(height: AppSpacing.xl),
+                const _SectionTitle(
+                  icon: Icons.dashboard_customize_outlined,
+                  color: AppColors.primary,
                   title: 'Kitchen overview',
-                  subtitle: 'Health, nutrition and spending',
+                  subtitle: 'A quick read on your household',
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                DashboardCard(
-                  icon: Icons.insights_outlined,
-                  label: 'Inventory intelligence',
-                  value: '${state.pantryHealthScore}% pantry health',
-                  note:
-                      '${state.lowStockItems.length} low stock · €${state.estimatedPantryValue.toStringAsFixed(0)} stored',
-                  wide: true,
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: AppSpacing.sm,
+                  mainAxisSpacing: AppSpacing.sm,
+                  childAspectRatio: 1.10,
+                  children: [
+                    _OverviewCard(
+                      icon: Icons.shopping_cart_outlined,
+                      color: AppColors.shopping,
+                      title: 'Shopping',
+                      value: '$shoppingRemaining remaining',
+                      detail:
+                          '€${shoppingEstimate.toStringAsFixed(2)} estimated',
+                      status: 'Week ${state.selectedShoppingWeek}',
+                      onTap: openShopping,
+                    ),
+                    _OverviewCard(
+                      icon: Icons.inventory_2_outlined,
+                      color: AppColors.pantry,
+                      title: 'Pantry',
+                      value: '${state.pantryCount} products',
+                      detail: state.expiringSoonCount == 0
+                          ? 'Everything looks fresh'
+                          : '${state.expiringSoonCount} expiring soon',
+                      status: '${state.pantryHealthScore}% health',
+                      onTap: openPantry,
+                    ),
+                    _OverviewCard(
+                      icon: Icons.account_balance_wallet_outlined,
+                      color: AppColors.budget,
+                      title: 'Budget',
+                      value: budgetRemaining >= 0
+                          ? '€${budgetRemaining.toStringAsFixed(0)} available'
+                          : '€${(-budgetRemaining).toStringAsFixed(0)} over',
+                      detail:
+                          '€${shoppingEstimate.toStringAsFixed(2)} / €${weeklyBudget.toStringAsFixed(2)}',
+                      status: 'This week',
+                      onTap: () => openBudgetCenter(context),
+                    ),
+                    _OverviewCard(
+                      icon: Icons.eco_outlined,
+                      color: AppColors.nutrition,
+                      title: 'Nutrition',
+                      value: state.hasTodaysNutrition
+                          ? '${state.todaysNutrition.calories.round()} kcal'
+                          : 'Analysis pending',
+                      detail: state.hasTodaysNutrition
+                          ? '${state.todaysNutrition.protein.round()} g protein'
+                          : 'Plan meals to calculate',
+                      status: 'Estimated',
+                      onTap: () => openNutritionCenter(context),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: AppSpacing.md),
+                _AttentionStrip(
+                  pantryHealth: state.pantryHealthScore,
+                  lowStock: state.lowStockItems.length,
+                  useSoon: state.useSoonItems.length,
                   onTap: () => openInventoryIntelligence(context),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                DashboardCard(
-                  icon: Icons.favorite_outline,
-                  label: 'Nutrition',
-                  value: state.hasTodaysNutrition
-                      ? '${state.todaysNutrition.calories.round()} kcal household'
-                      : 'Nutrition analysis pending',
-                  note: state.hasTodaysNutrition
-                      ? '${state.todaysNutrition.protein.round()} g protein · Estimated'
-                      : 'Plan today’s meals to calculate estimates',
-                  wide: true,
-                  accentColor: AppColors.terracotta,
-                  onTap: () => openNutritionCenter(context),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                DashboardCard(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Budget',
-                  value:
-                      '€${weeklyShoppingEstimate.toStringAsFixed(2)} / €${weeklyBudget.toStringAsFixed(2)} this week',
-                  note:
-                      '€${monthlyShoppingEstimate.toStringAsFixed(2)} / €${monthlyBudget.toStringAsFixed(2)} monthly estimate',
-                  wide: true,
-                  accentColor: AppColors.warning,
-                  onTap: () => openBudgetCenter(context),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                DashboardCard(
-                  icon: Icons.event_busy_outlined,
-                  label: 'Use soon',
-                  value:
-                      '${state.useSoonItems.length} product${state.useSoonItems.length == 1 ? '' : 's'}',
-                  note: state.useSoonItems.isEmpty
-                      ? 'No urgent expiry alerts'
-                      : '${state.expiresTodayItems.length} need attention today',
-                  wide: true,
-                  accentColor: state.useSoonItems.isEmpty
-                      ? AppColors.primary
-                      : AppColors.warning,
-                  onTap: () => openExpiryIntelligence(context),
+                  onExpiryTap: () => openExpiryIntelligence(context),
                 ),
               ],
             ),
@@ -211,8 +221,592 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  
+class _PremiumHeader extends StatelessWidget {
+  const _PremiumHeader({
+    required this.greeting,
+    required this.date,
+    required this.kitchenName,
+    required this.kitchenCount,
+    required this.onKitchenTap,
+    required this.onSettingsTap,
+  });
+
+  final String greeting;
+  final String date;
+  final String kitchenName;
+  final int kitchenCount;
+  final VoidCallback onKitchenTap;
+  final VoidCallback onSettingsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 62,
+          height: 62,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: AppColors.border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 18,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              'assets/images/kitchen_navigator_icon.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kitchen Navigator',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: AppColors.primaryStrong,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                greeting,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                date,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 5),
+              InkWell(
+                onTap: onKitchenTap,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.home_outlined,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        kitchenName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      ' · $kitchenCount',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 10,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more,
+                      size: 15,
+                      color: AppColors.muted,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          tooltip: 'Settings',
+          onPressed: onSettingsTap,
+          icon: const Icon(Icons.tune_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .11),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color, size: 21),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 1),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayFocusCard extends StatelessWidget {
+  const _TodayFocusCard({
+    required this.day,
+    required this.mealText,
+    required this.people,
+    required this.cookingMinutes,
+    required this.hasMeal,
+    required this.onOpenPlan,
+  });
+
+  final String day;
+  final String mealText;
+  final int people;
+  final int cookingMinutes;
+  final bool hasMeal;
+  final VoidCallback onOpenPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            AppColors.primaryStrong,
+            AppColors.primary,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2416452C),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  day.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .8,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              const Icon(
+                Icons.restaurant_menu_rounded,
+                color: Color(0xFFE8C37D),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            hasMeal ? mealText : 'Ready when you are',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              height: 1.16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            hasMeal
+                ? '$people people · $cookingMinutes min planned'
+                : 'Plan today’s meals and let Kitchen Navigator guide the rest.',
+            style: const TextStyle(
+              color: Color(0xFFD9E6DE),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primaryStrong,
+              ),
+              onPressed: onOpenPlan,
+              icon: Icon(
+                hasMeal
+                    ? Icons.arrow_forward_rounded
+                    : Icons.add_rounded,
+              ),
+              label: Text(
+                hasMeal ? 'Open today’s plan' : 'Plan today',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 10,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color, size: 23),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewCard extends StatelessWidget {
+  const _OverviewCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.value,
+    required this.detail,
+    required this.status,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String value;
+  final String detail;
+  final String status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: .11),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 21),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.arrow_outward_rounded,
+                    color: color.withValues(alpha: .8),
+                    size: 18,
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                title,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 9.5,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.subtle,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AttentionStrip extends StatelessWidget {
+  const _AttentionStrip({
+    required this.pantryHealth,
+    required this.lowStock,
+    required this.useSoon,
+    required this.onTap,
+    required this.onExpiryTap,
+  });
+
+  final int pantryHealth;
+  final int lowStock;
+  final int useSoon;
+  final VoidCallback onTap;
+  final VoidCallback onExpiryTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (lowStock == 0 && useSoon == 0) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.pantry.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: AppColors.pantry.withValues(alpha: .18),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                color: AppColors.pantry,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pantry looks healthy · $pantryHealth%',
+                  style: const TextStyle(
+                    color: AppColors.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.muted,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: _AttentionChip(
+            icon: Icons.inventory_outlined,
+            label: '$lowStock low stock',
+            color: AppColors.shopping,
+            onTap: onTap,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: _AttentionChip(
+            icon: Icons.event_busy_outlined,
+            label: '$useSoon use soon',
+            color: AppColors.notifications,
+            onTap: onExpiryTap,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AttentionChip extends StatelessWidget {
+  const _AttentionChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.medium),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 11,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+          border: Border.all(
+            color: color.withValues(alpha: .18),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> _scanFromDashboard(
   BuildContext context, {
   required VoidCallback openShopping,
@@ -270,6 +864,16 @@ Future<void> _scanFromDashboard(
               product.name,
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            if (product.brand.trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                product.brand,
+                style: const TextStyle(
+                  color: AppColors.shopping,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             const SizedBox(height: 5),
             Text(
               shoppingMatch != null
@@ -284,7 +888,7 @@ Future<void> _scanFromDashboard(
               ListTile(
                 leading: const Icon(
                   Icons.shopping_cart_checkout,
-                  color: AppColors.primary,
+                  color: AppColors.shopping,
                 ),
                 title: const Text('Mark purchased'),
                 subtitle:
@@ -293,7 +897,10 @@ Future<void> _scanFromDashboard(
                     Navigator.pop(sheetContext, 'purchase'),
               ),
             ListTile(
-              leading: const Icon(Icons.inventory_2_outlined),
+              leading: const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.pantry,
+              ),
               title: Text(
                 pantryMatch == null
                     ? 'Add to Pantry'
@@ -302,7 +909,10 @@ Future<void> _scanFromDashboard(
               onTap: () => Navigator.pop(sheetContext, 'pantry'),
             ),
             ListTile(
-              leading: const Icon(Icons.add_shopping_cart),
+              leading: const Icon(
+                Icons.add_shopping_cart,
+                color: AppColors.shopping,
+              ),
               title: const Text('Add to Shopping'),
               onTap: () => Navigator.pop(sheetContext, 'shopping'),
             ),
@@ -320,8 +930,17 @@ Future<void> _scanFromDashboard(
   if (action == null || !context.mounted) return;
 
   if (action == 'purchase' && shoppingMatch != null) {
+    if (product.brand.trim().isNotEmpty &&
+        shoppingMatch.brand.trim().isEmpty) {
+      shoppingMatch = shoppingMatch.copyWith(
+        brand: product.brand.trim(),
+      );
+      await state.updateShoppingItem(shoppingMatch);
+    }
+
     await state.setShoppingPurchased(shoppingMatch, true);
     if (!context.mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -350,6 +969,7 @@ Future<void> _scanFromDashboard(
   if (action == 'shopping') {
     await state.addManualShoppingItem(
       name: product.name,
+      brand: product.brand,
       quantity: product.defaultQuantity,
       unit: product.defaultUnit,
       category: 'Other',
@@ -367,428 +987,37 @@ String _dashboardNormalize(String value) {
       .replaceAll(RegExp(r'\s+'), ' ');
 }
 
-int _overallHealth(AppState state) {
-    final shoppingPenalty = state.selectedWeeklyShoppingItems
-            .where((item) => !state.isShoppingChecked(item.key))
-            .length
-            .clamp(0, 10) *
-        2;
-    final expiryPenalty =
-        state.expiredCount.clamp(0, 5) * 7;
-    return (state.pantryHealthScore -
-            shoppingPenalty -
-            expiryPenalty)
-        .clamp(0, 100);
-  }
+String _greeting(int hour) {
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.kitchenName,
-    required this.kitchenCount,
-    required this.onKitchenTap,
-    required this.onSettingsTap,
-  });
+String _friendlyDate(DateTime value) {
+  const weekdays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
 
-  final String kitchenName;
-  final int kitchenCount;
-  final VoidCallback onKitchenTap;
-  final VoidCallback onSettingsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const KnifeCompassLogo(size: 52),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Kitchen Navigator',
-                style: TextStyle(
-                  color: AppColors.text,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -.4,
-                ),
-              ),
-              const SizedBox(height: 3),
-              InkWell(
-                onTap: onKitchenTap,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.location_on_outlined,
-                        size: 15,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          kitchenName,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '· $kitchenCount',
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Icon(
-                        Icons.expand_more,
-                        size: 16,
-                        color: AppColors.muted,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        IconButton.filledTonal(
-          onPressed: onSettingsTap,
-          tooltip: 'Settings',
-          icon: const Icon(Icons.tune_rounded),
-        ),
-      ],
-    );
-  }
-}
-
-class _TodayMealCard extends StatelessWidget {
-  const _TodayMealCard({
-    required this.day,
-    required this.mealText,
-    required this.people,
-    required this.ingredients,
-    required this.cookingMinutes,
-    required this.hasMeal,
-    required this.onPlan,
-    required this.onCook,
-  });
-
-  final String day;
-  final String mealText;
-  final int people;
-  final int ingredients;
-  final int cookingMinutes;
-  final bool hasMeal;
-  final VoidCallback onPlan;
-  final VoidCallback onCook;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              day.toUpperCase(),
-              style: const TextStyle(
-                color: AppColors.terracotta,
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .9,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              mealText,
-              style: const TextStyle(
-                color: AppColors.text,
-                fontSize: 23,
-                height: 1.2,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                _MealMeta(
-                  icon: Icons.people_outline,
-                  value: '$people',
-                  label: 'People',
-                ),
-                _MealMeta(
-                  icon: Icons.list_alt_outlined,
-                  value: '$ingredients',
-                  label: 'Ingredients',
-                ),
-                _MealMeta(
-                  icon: Icons.schedule_outlined,
-                  value: '$cookingMinutes',
-                  label: 'Minutes',
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onPlan,
-                    icon: const Icon(Icons.calendar_month_outlined),
-                    label: Text(hasMeal ? 'Edit plan' : 'Plan meal'),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onCook,
-                    icon: Icon(
-                      hasMeal ? Icons.play_arrow : Icons.add,
-                    ),
-                    label: Text(
-                      hasMeal ? 'Start cooking' : 'Add meal',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MealMeta extends StatelessWidget {
-  const _MealMeta({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: AppColors.primary, size: 20),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.text,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          subtitle,
-          style: const TextStyle(
-            color: AppColors.muted,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-
-class _IntegrationOverview extends StatelessWidget {
-  const _IntegrationOverview({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final meals = state.todaysMonthlyMeals;
-    final progress = state.selectedShoppingWeekProgress;
-    final rating = state.familyAverageMealRating;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Version 11 overview',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 1.55,
-          children: [
-            _OverviewTile(
-              icon: Icons.calendar_month_outlined,
-              label: 'Today’s plan',
-              value: '${meals.length} meals',
-              detail:
-                  '${state.todaysGuidedRecipeCount} guided recipes',
-            ),
-            _OverviewTile(
-              icon: Icons.inventory_2_outlined,
-              label: 'Pantry risks',
-              value: '${state.wasteRiskItems.length}',
-              detail:
-                  '${state.restockSuggestedItems.length} restock suggestions',
-            ),
-            _OverviewTile(
-              icon: Icons.shopping_cart_outlined,
-              label: 'Shopping',
-              value: '${(progress * 100).round()}%',
-              detail:
-                  'Week ${state.selectedShoppingWeek} complete',
-            ),
-            _OverviewTile(
-              icon: Icons.star_outline,
-              label: 'Family rating',
-              value: rating == 0
-                  ? '—'
-                  : rating.toStringAsFixed(1),
-              detail: '${state.cookingFeedback.length} meals reviewed',
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _OverviewTile extends StatelessWidget {
-  const _OverviewTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.detail,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 11,
-                    ),
-                  ),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    detail,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.subtle,
-                      fontSize: 9,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _nutritionGoalLabel(NutritionGoal goal) {
-  switch (goal) {
-    case NutritionGoal.balanced:
-      return 'Balanced';
-    case NutritionGoal.loseWeight:
-      return 'Lose weight';
-    case NutritionGoal.maintainWeight:
-      return 'Maintain weight';
-    case NutritionGoal.gainMuscle:
-      return 'Gain muscle';
-    case NutritionGoal.highProtein:
-      return 'High protein';
-    case NutritionGoal.vegetarian:
-      return 'Vegetarian';
-    case NutritionGoal.mediterranean:
-      return 'Mediterranean';
-    case NutritionGoal.lowCarb:
-      return 'Low carb';
-  }
+  return '${weekdays[value.weekday - 1]}, '
+      '${value.day} ${months[value.month - 1]}';
 }

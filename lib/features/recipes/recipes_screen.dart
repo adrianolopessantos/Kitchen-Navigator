@@ -49,13 +49,20 @@ class _RecipesScreenState extends State<RecipesScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
         children: [
-          const Text(
-            'Smart Recipes',
-            style: TextStyle(
-              color: AppColors.text,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Smart Recipes',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _showAddRecipe(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Add recipe'),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           const Text(
@@ -148,6 +155,201 @@ class _RecipesScreenState extends State<RecipesScreen> {
       ),
     );
   }
+
+  Future<void> _showAddRecipe(BuildContext context) async {
+    final state = AppScope.of(context);
+    final nameController = TextEditingController();
+    final categoryController =
+        TextEditingController(text: 'Everyday');
+    final cuisineController =
+        TextEditingController(text: 'International');
+    final servingsController = TextEditingController(text: '2');
+    final prepController = TextEditingController(text: '10');
+    final ingredientsController = TextEditingController();
+    final stepsController = TextEditingController();
+    final notesController = TextEditingController();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          18,
+          16,
+          MediaQuery.viewInsetsOf(sheetContext).bottom + 18,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add your recipe',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Create it your way. One ingredient and one step per line.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration:
+                    const InputDecoration(labelText: 'Recipe name'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: categoryController,
+                      decoration:
+                          const InputDecoration(labelText: 'Category'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: cuisineController,
+                      decoration:
+                          const InputDecoration(labelText: 'Cuisine'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: servingsController,
+                      keyboardType: TextInputType.number,
+                      decoration:
+                          const InputDecoration(labelText: 'Servings'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: prepController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Prep minutes',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ingredientsController,
+                minLines: 4,
+                maxLines: 8,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Ingredients',
+                  hintText: '500 g pasta\n2 tomatoes\n1 tbsp olive oil',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: stepsController,
+                minLines: 5,
+                maxLines: 10,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Steps',
+                  hintText:
+                      'Boil the pasta\nPrepare the sauce\nCombine and serve',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final ingredients = ingredientsController.text
+                        .split('\n')
+                        .map((value) => value.trim())
+                        .where((value) => value.isNotEmpty)
+                        .toList();
+                    final stepLines = stepsController.text
+                        .split('\n')
+                        .map((value) => value.trim())
+                        .where((value) => value.isNotEmpty)
+                        .toList();
+
+                    if (name.isEmpty ||
+                        ingredients.isEmpty ||
+                        stepLines.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Add a name, at least one ingredient and one step.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final recipe = Recipe(
+                      id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
+                      name: name,
+                      ingredients: ingredients,
+                      steps: stepLines
+                          .map(
+                            (value) => RecipeStep(
+                              instruction: value,
+                            ),
+                          )
+                          .toList(),
+                      servings:
+                          int.tryParse(servingsController.text) ?? 2,
+                      description: notesController.text.trim(),
+                      category: categoryController.text.trim().isEmpty
+                          ? 'Everyday'
+                          : categoryController.text.trim(),
+                      cuisine: cuisineController.text.trim().isEmpty
+                          ? 'International'
+                          : cuisineController.text.trim(),
+                      prepMinutes:
+                          int.tryParse(prepController.text) ?? 10,
+                      tags: const ['Custom'],
+                    );
+
+                    await state.addCustomRecipe(recipe);
+                    if (!mounted || !sheetContext.mounted) return;
+                    Navigator.pop(sheetContext);
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save recipe'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
 }
 
 class _RecipeCard extends StatelessWidget {
@@ -250,30 +452,17 @@ class _RecipeCard extends StatelessWidget {
             final missing =
                 ingredients.where((item) => !item.available).toList();
 
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom:
-                      MediaQuery.viewInsetsOf(sheetContext).bottom,
-                ),
-                child: SizedBox(
-                  height:
-                      MediaQuery.sizeOf(sheetContext).height * .88,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(
-                            16,
-                            18,
-                            16,
-                            24,
-                          ),
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                18,
+                16,
+                MediaQuery.viewInsetsOf(sheetContext).bottom + 22,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
                       recipe.name,
                       style: const TextStyle(
@@ -431,86 +620,57 @@ class _RecipeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                            const SizedBox(height: 12),
-                          ],
-                        ),
-                      ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(
-                          16,
-                          10,
-                          16,
-                          10,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border(
-                            top: BorderSide(
-                              color: AppColors.border,
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: missing.isEmpty
+                                ? null
+                                : () {
+                                    for (final ingredient in missing) {
+                                      state.addPantryItem(
+                                        name: ingredient.name,
+                                        quantity: 0,
+                                        unit: ingredient.unit,
+                                        location: _suggestLocation(
+                                          ingredient.name,
+                                        ),
+                                      );
+                                    }
+                                    Navigator.pop(sheetContext);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '${missing.length} missing ingredient${missing.length == 1 ? '' : 's'} added to Shopping.',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            icon: const Icon(
+                              Icons.shopping_cart_outlined,
                             ),
+                            label: const Text('Add missing'),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: missing.isEmpty
-                                    ? null
-                                    : () async {
-                                        for (final ingredient
-                                            in missing) {
-                                          await state
-                                              .addManualShoppingItem(
-                                            name: ingredient.name,
-                                            quantity:
-                                                ingredient.quantity,
-                                            unit: ingredient.unit,
-                                            category: 'Pantry',
-                                            week: state
-                                                .selectedShoppingWeek,
-                                          );
-                                        }
-                                        if (!context.mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '${missing.length} missing ingredient'
-                                              '${missing.length == 1 ? '' : 's'} '
-                                              'added to Shopping.',
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                icon: const Icon(
-                                  Icons.shopping_cart_outlined,
-                                ),
-                                label:
-                                    const Text('Add missing'),
-                              ),
-                            ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(sheetContext);
-                                  openCookingAssistant(
-                                    context,
-                                    recipe,
-                                    servings: people,
-                                  );
-                                },
-                                icon:
-                                    const Icon(Icons.play_arrow),
-                                label: const Text('Cook'),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              Navigator.pop(sheetContext);
+                              openCookingAssistant(
+                                context,
+                                recipe,
+                                servings: people,
+                              );
+                            },
+                            icon: const Icon(Icons.play_arrow),
+                            label: const Text('Cook'),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             );

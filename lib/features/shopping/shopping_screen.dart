@@ -47,9 +47,9 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     final allItems = state.activeShoppingItems;
 
     final filtered = allItems.where((item) {
-      return item.name.toLowerCase().contains(
-            query.trim().toLowerCase(),
-          );
+      final search = query.trim().toLowerCase();
+      return item.name.toLowerCase().contains(search) ||
+          item.brand.toLowerCase().contains(search);
     }).toList();
 
     final remaining = filtered
@@ -203,6 +203,8 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     final state = AppScope.of(context);
     final nameController =
         TextEditingController(text: existing?.name ?? '');
+    final brandController =
+        TextEditingController(text: existing?.brand ?? '');
     final quantityController = TextEditingController(
       text: existing == null
           ? '1'
@@ -226,17 +228,28 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                18,
-                18,
-                18,
-                MediaQuery.viewInsetsOf(context).bottom + 22,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            final keyboardInset =
+                MediaQuery.viewInsetsOf(context).bottom;
+
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: keyboardInset),
+                child: SizedBox(
+                  height: MediaQuery.sizeOf(context).height * .88,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(
+                            18,
+                            18,
+                            18,
+                            28,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                     Text(
                       existing == null
                           ? 'Add product'
@@ -250,6 +263,15 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                       autofocus: existing == null,
                       decoration: const InputDecoration(
                         labelText: 'Product',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: brandController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Brand (optional)',
+                        hintText: 'e.g. Barilla, Heinz, Tesco',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -395,70 +417,96 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                             .toList(),
                       ),
                     ],
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () async {
-                          final name = nameController.text.trim();
-                          final quantity = double.tryParse(
-                            quantityController.text
-                                .replaceAll(',', '.'),
-                          );
-                          final price = double.tryParse(
-                                priceController.text
-                                    .replaceAll(',', '.'),
-                              ) ??
-                              1;
-
-                          if (name.isEmpty ||
-                              quantity == null ||
-                              quantity <= 0) {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Enter a product and valid quantity.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          if (existing == null) {
-                            await state.addManualShoppingItem(
-                              name: name,
-                              quantity: quantity,
-                              unit: unit,
-                              category: category,
-                              week: week,
-                              estimatedUnitPrice: price,
-                            );
-                          } else {
-                            await state.updateShoppingItem(
-                              existing.copyWith(
-                                name: name,
-                                quantity: quantity,
-                                unit: unit,
-                                category: category,
-                                week: week,
-                                estimatedUnitPrice: price,
-                              ),
-                            );
-                          }
-
-                          if (sheetContext.mounted) {
-                            Navigator.pop(sheetContext);
-                          }
-                        },
-                        child: Text(
-                          existing == null
-                              ? 'Add to shopping list'
-                              : 'Save changes',
+                            const SizedBox(height: 8),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(
+                          18,
+                          10,
+                          18,
+                          12,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border(
+                            top: BorderSide(
+                              color: AppColors.border,
+                            ),
+                          ),
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () async {
+                              final name =
+                                  nameController.text.trim();
+                              final quantity = double.tryParse(
+                                quantityController.text
+                                    .replaceAll(',', '.'),
+                              );
+                              final price = double.tryParse(
+                                    priceController.text
+                                        .replaceAll(',', '.'),
+                                  ) ??
+                                  1;
+
+                              if (name.isEmpty ||
+                                  quantity == null ||
+                                  quantity <= 0) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter a product and valid quantity.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              if (existing == null) {
+                                await state.addManualShoppingItem(
+                                  name: name,
+                                  brand:
+                                      brandController.text.trim(),
+                                  quantity: quantity,
+                                  unit: unit,
+                                  category: category,
+                                  week: week,
+                                  estimatedUnitPrice: price,
+                                );
+                              } else {
+                                await state.updateShoppingItem(
+                                  existing.copyWith(
+                                    name: name,
+                                    brand:
+                                        brandController.text.trim(),
+                                    quantity: quantity,
+                                    unit: unit,
+                                    category: category,
+                                    week: week,
+                                    estimatedUnitPrice: price,
+                                  ),
+                                );
+                              }
+
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                            },
+                            child: Text(
+                              existing == null
+                                  ? 'Add to shopping list'
+                                  : 'Save changes',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -503,6 +551,11 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     }
 
     if (match != null) {
+      if (result.brand.trim().isNotEmpty &&
+          match.brand.trim().isEmpty) {
+        match = match.copyWith(brand: result.brand.trim());
+        await state.updateShoppingItem(match);
+      }
       state.purchaseShoppingItem(
         item: match,
         location: result.location,
@@ -517,6 +570,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     } else {
       await state.addManualShoppingItem(
         name: result.name,
+        brand: result.brand,
         quantity: result.defaultQuantity,
         unit: result.defaultUnit,
         category: 'Other',
@@ -859,6 +913,36 @@ class _ShoppingItemRow extends StatelessWidget {
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Brand: ',
+                            style: TextStyle(
+                              color: purchased
+                                  ? AppColors.subtle
+                                  : AppColors.muted,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              item.brand.trim().isEmpty
+                                  ? 'Any brand'
+                                  : item.brand.trim(),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: purchased
+                                    ? AppColors.subtle
+                                    : AppColors.shopping,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
                       Row(
                         children: [
                           Expanded(

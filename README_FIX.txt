@@ -1,39 +1,30 @@
-Kitchen Navigator v11.0 RC2.2 - Compact Pantry
+Kitchen Navigator v12 Alpha 5 - Today Overflow Fix
 
-Changes:
-- Replaces large multi-button Pantry cards with compact rows
-- Shows only product, quantity, unit, location and expiry/status
-- Tap a row to open Product Details
-- Details contain Use some, Edit, Add to Shopping and Record as waste
-- Swipe left to delete
-- Undo after deletion
-- Search retained
-- Location filters retained
-- Adds sorting by Needs attention, Expiry, Name and Location
-- Reduces vertical space so large inventories are easier to scan
-- Adds SafeArea and keyboard-close protection to Pantry editor
-- Adds UI and state regression tests
+Fix:
+- Reapplies the proven Alpha 3 Today layout fix.
+- Kitchen Overview cards receive slightly more vertical space.
+- Quick Action vertical padding is slightly reduced.
+- Resolves the small RenderFlex bottom overflow (~4.4 px).
+
+Why it returned:
+Alpha 5 was created from the earlier Alpha 3 Dashboard source,
+before the dedicated overflow fix had been applied.
 
 Install:
 1. Extract this ZIP.
-2. Copy TWO items into:
+2. Copy the lib folder into:
    C:\Projects\KitchenNavigator
-   lib
-   test
-3. Choose Replace all.
+3. Choose Replace all / Merge folders.
 4. Run:
-   C:\src\flutter\bin\flutter.bat analyze --no-fatal-infos --no-fatal-warnings
    C:\src\flutter\bin\flutter.bat test
    C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
 
-Phone test:
-- Open Pantry with many products.
-- Confirm many more rows fit on screen.
-- Tap a product and test Use some, Edit and Add to Shopping.
-- Swipe a product left and test Undo.
-- Test Search, location filters and all sort options.
+Check Today:
+- Quick Actions
+- Shopping / Pantry / Budget / Nutrition cards
+- No yellow/black overflow warning
 
 After successful testing:
-   git add lib test
-   git commit -m "Add compact RC2 pantry experience"
+   git add lib
+   git commit -m "Reapply Today overflow fix to Alpha 5"
    git push

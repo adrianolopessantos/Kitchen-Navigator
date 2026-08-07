@@ -32,7 +32,7 @@ class _KitchenNavigatorAppState extends State<KitchenNavigatorApp> {
       child: MaterialApp(
         title: 'Kitchen Navigator',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark(),
+        theme: AppTheme.light(),
         home: const _AppLoadingGate(),
       ),
     );
@@ -51,13 +51,38 @@ class _AppLoadingGate extends StatelessWidget {
       return const Scaffold(
         body: SafeArea(
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 14),
-                Text('Loading your kitchen data...'),
-              ],
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _BrandMark(),
+                  SizedBox(height: 20),
+                  Text(
+                    'Kitchen Navigator',
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Your guide from pantry to plate.',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  SizedBox(height: 24),
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -69,6 +94,39 @@ class _AppLoadingGate extends StatelessWidget {
     }
 
     return const AppShell();
+  }
+}
+
+
+class _BrandMark extends StatelessWidget {
+  const _BrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 112,
+      height: 112,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x16000000),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Image.asset(
+          'assets/images/kitchen_navigator_icon.png',
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
   }
 }
 
@@ -108,9 +166,9 @@ class _AppShellState extends State<AppShell> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Color(0x55000000),
-              blurRadius: 24,
-              offset: Offset(0, -8),
+              color: Color(0x14000000),
+              blurRadius: 18,
+              offset: Offset(0, -2),
             ),
           ],
         ),

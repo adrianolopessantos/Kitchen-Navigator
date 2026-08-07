@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/state/app_scope.dart';
+import '../../core/services/product_lookup_service.dart';
+import '../barcode/barcode_scanner_screen.dart';
 import '../../core/services/pantry_intelligence_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/pantry_item.dart';
@@ -89,6 +91,7 @@ class _PantryScreenState extends State<PantryScreen> {
                       openInventoryIntelligence(context),
                   onExpiry: () =>
                       openExpiryIntelligence(context),
+                  onScan: () => _scanIntoPantry(context),
                   onAdd: () => _showItemEditor(context),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -722,6 +725,7 @@ class _PantryHeader extends StatelessWidget {
     required this.estimatedWaste,
     required this.onInsights,
     required this.onExpiry,
+    required this.onScan,
     required this.onAdd,
   });
 
@@ -734,6 +738,7 @@ class _PantryHeader extends StatelessWidget {
   final double estimatedWaste;
   final VoidCallback onInsights;
   final VoidCallback onExpiry;
+  final VoidCallback onScan;
   final VoidCallback onAdd;
 
   @override
@@ -764,6 +769,12 @@ class _PantryHeader extends StatelessWidget {
               onPressed: onInsights,
               tooltip: 'Inventory intelligence',
               icon: const Icon(Icons.insights_outlined),
+            ),
+            const SizedBox(width: 6),
+            IconButton.filledTonal(
+              onPressed: onScan,
+              tooltip: 'Scan into Pantry',
+              icon: const Icon(Icons.qr_code_scanner_rounded),
             ),
             const SizedBox(width: 6),
             IconButton.filled(
@@ -1169,6 +1180,170 @@ class _EmptyPantry extends StatelessWidget {
       ),
     );
   }
+}
+
+
+Future<void> _scanIntoPantry(BuildContext context) async {
+  final state = AppScope.of(context);
+  final barcode = await openBarcodeScanner(context);
+  if (!context.mounted ||
+      barcode == null ||
+      barcode.trim().isEmpty) {
+    return;
+  }
+
+  final product =
+      await ProductLookupService.findByBarcode(barcode) ??
+          ProductLookupService.createFallback(barcode);
+  if (!context.mounted) return;
+
+  final quantityController = TextEditingController(
+    text: _formatQuantity(product.defaultQuantity),
+  );
+  final unitController =
+      TextEditingController(text: product.defaultUnit);
+  var location = product.location;
+
+  final shouldAdd = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: AppColors.surface,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (context, setModalState) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.md,
+          MediaQuery.viewInsetsOf(context).bottom +
+              AppSpacing.lg,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.pantry.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: AppColors.pantry,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      product.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                ],
+              ),
+              if (product.brand.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  product.brand,
+                  style: const TextStyle(
+                    color: AppColors.pantry,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              const Text(
+                'Add this scan directly to Pantry. If the same product, unit and location already exist, its quantity will increase.',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: quantityController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration:
+                          const InputDecoration(labelText: 'Quantity'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: unitController,
+                      decoration:
+                          const InputDecoration(labelText: 'Unit'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<StorageLocation>(
+                value: location,
+                decoration: const InputDecoration(labelText: 'Location'),
+                items: StorageLocation.values
+                    .map(
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(value.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setModalState(() => location = value);
+                  }
+                },
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, true),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  label: const Text('Add to Pantry'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  if (shouldAdd != true || !context.mounted) return;
+
+  final quantity = double.tryParse(
+        quantityController.text.replaceAll(',', '.'),
+      ) ??
+      product.defaultQuantity;
+  final unit = unitController.text.trim().isEmpty
+      ? product.defaultUnit
+      : unitController.text.trim();
+
+  state.addPantryItem(
+    name: product.name,
+    quantity: quantity,
+    unit: unit,
+    location: location,
+    expiryDate: DateTime.now().add(
+      Duration(days: product.suggestedShelfLifeDays),
+    ),
+    barcode: product.barcode,
+  );
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('${product.name} added to Pantry.'),
+    ),
+  );
 }
 
 class _Urgency {

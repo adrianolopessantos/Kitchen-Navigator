@@ -1,7 +1,7 @@
 name: kitchen_navigator
-description: Kitchen Navigator 8.0 - Making Every Meal Easier
+description: Kitchen Navigator 12 - Your guide from pantry to plate.
 publish_to: "none"
-version: 11.0.0-rc.2.1+36
+version: 12.0.0-alpha.5+42
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -16,6 +16,7 @@ dependencies:
   shared_preferences: ^2.5.3
   speech_to_text: ^7.4.0
   flutter_tts: ^4.2.5
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

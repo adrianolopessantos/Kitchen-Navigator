@@ -39,6 +39,7 @@ class ShoppingItem {
   const ShoppingItem({
     required this.key,
     required this.name,
+    this.brand = '',
     required this.quantity,
     required this.unit,
     required this.category,
@@ -51,6 +52,7 @@ class ShoppingItem {
 
   final String key;
   final String name;
+  final String brand;
   final double quantity;
   final String unit;
   final String category;
@@ -65,6 +67,7 @@ class ShoppingItem {
   ShoppingItem copyWith({
     String? key,
     String? name,
+    String? brand,
     double? quantity,
     String? unit,
     String? category,
@@ -75,6 +78,7 @@ class ShoppingItem {
     return ShoppingItem(
       key: key ?? this.key,
       name: name ?? this.name,
+      brand: brand ?? this.brand,
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
       category: category ?? this.category,
@@ -90,6 +94,7 @@ class ShoppingItem {
   Map<String, dynamic> toJson() => {
         'key': key,
         'name': name,
+        'brand': brand,
         'quantity': quantity,
         'unit': unit,
         'category': category,
@@ -105,6 +110,7 @@ class ShoppingItem {
       key: json['key'] as String? ??
           DateTime.now().microsecondsSinceEpoch.toString(),
       name: json['name'] as String? ?? 'Product',
+      brand: json['brand'] as String? ?? '',
       quantity:
           (json['quantity'] as num?)?.toDouble() ?? 1,
       unit: json['unit'] as String? ?? 'each',
@@ -158,7 +164,8 @@ class AppState extends ChangeNotifier {
     'Sunday',
   ];
 
-  final List<Recipe> recipes = essentialRecipeLibrary;
+  List<Recipe> recipes = List<Recipe>.from(essentialRecipeLibrary);
+  final List<Recipe> customRecipes = [];
 
   final Map<String, List<PlannedMeal>> _plan = {
     for (final day in days) day: <PlannedMeal>[],
@@ -982,6 +989,8 @@ class AppState extends ChangeNotifier {
       'kitchen_navigator_${activeKitchenId}_equipment_v1';
   String get _temperatureUnitStorageKey =>
       'kitchen_navigator_${activeKitchenId}_temperature_unit_v1';
+  String get _customRecipesStorageKey =>
+      'kitchen_navigator_${activeKitchenId}_custom_recipes_v12';
 
   Future<void> _loadSavedData() async {
     final preferences = await SharedPreferences.getInstance();
@@ -1052,11 +1061,29 @@ class AppState extends ChangeNotifier {
     manualShoppingItems.clear();
     hiddenShoppingItems.clear();
     kitchenAppliances.clear();
+    customRecipes.clear();
+    recipes = List<Recipe>.from(essentialRecipeLibrary);
     for (final day in days) {
       _plan[day]?.clear();
     }
 
     try {
+      final customRecipesJson =
+          preferences.getString(_customRecipesStorageKey);
+      if (customRecipesJson != null &&
+          customRecipesJson.isNotEmpty) {
+        final decoded =
+            jsonDecode(customRecipesJson) as List<dynamic>;
+        customRecipes.addAll(
+          decoded.map(
+            (value) => _recipeFromJson(
+              Map<String, dynamic>.from(value as Map),
+            ),
+          ),
+        );
+        recipes.addAll(customRecipes);
+      }
+
       final pantryJson = preferences.getString(_pantryStorageKey);
       if (pantryJson != null && pantryJson.isNotEmpty) {
         final decoded = jsonDecode(pantryJson) as List<dynamic>;
@@ -1315,6 +1342,80 @@ class AppState extends ChangeNotifier {
     );
   }
 
+
+  Future<void> addCustomRecipe(Recipe recipe) async {
+    customRecipes.add(recipe);
+    recipes.add(recipe);
+    await _saveCustomRecipes();
+    notifyListeners();
+  }
+
+  Future<void> _saveCustomRecipes() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _customRecipesStorageKey,
+      jsonEncode(customRecipes.map(_recipeToJson).toList()),
+    );
+  }
+
+  Map<String, dynamic> _recipeToJson(Recipe recipe) => {
+        'id': recipe.id,
+        'name': recipe.name,
+        'ingredients': recipe.ingredients,
+        'steps': recipe.steps
+            .map(
+              (step) => {
+                'instruction': step.instruction,
+                'seconds': step.seconds,
+              },
+            )
+            .toList(),
+        'servings': recipe.servings,
+        'description': recipe.description,
+        'category': recipe.category,
+        'cuisine': recipe.cuisine,
+        'difficulty': recipe.difficulty,
+        'prepMinutes': recipe.prepMinutes,
+        'equipment': recipe.equipment,
+        'temperatureCelsius': recipe.temperatureCelsius,
+        'tags': recipe.tags,
+      };
+
+  Recipe _recipeFromJson(Map<String, dynamic> json) => Recipe(
+        id: json['id'] as String? ??
+            'custom-${DateTime.now().microsecondsSinceEpoch}',
+        name: json['name'] as String? ?? 'Custom recipe',
+        ingredients: (json['ingredients'] as List<dynamic>? ?? const [])
+            .map((value) => value.toString())
+            .toList(),
+        steps: (json['steps'] as List<dynamic>? ?? const [])
+            .map(
+              (value) {
+                final map = Map<String, dynamic>.from(value as Map);
+                return RecipeStep(
+                  instruction:
+                      map['instruction'] as String? ?? '',
+                  seconds: (map['seconds'] as num?)?.toInt() ?? 0,
+                );
+              },
+            )
+            .toList(),
+        servings: (json['servings'] as num?)?.toInt() ?? 2,
+        description: json['description'] as String? ?? '',
+        category: json['category'] as String? ?? 'Everyday',
+        cuisine: json['cuisine'] as String? ?? 'International',
+        difficulty: json['difficulty'] as String? ?? 'Easy',
+        prepMinutes: (json['prepMinutes'] as num?)?.toInt() ?? 10,
+        equipment: (json['equipment'] as List<dynamic>? ?? const [])
+            .map((value) => value.toString())
+            .toList(),
+        temperatureCelsius:
+            (json['temperatureCelsius'] as num?)?.toInt(),
+        tags: (json['tags'] as List<dynamic>? ?? const [])
+            .map((value) => value.toString())
+            .toList(),
+      );
+
   Future<void> _savePantry() async {
     final preferences = await SharedPreferences.getInstance();
     final encoded = jsonEncode(
@@ -1385,6 +1486,7 @@ class AppState extends ChangeNotifier {
     await preferences.remove(_shoppingEditsStorageKey);
     await preferences.remove(_equipmentStorageKey);
     await preferences.remove(_temperatureUnitStorageKey);
+    await preferences.remove(_customRecipesStorageKey);
     await HouseholdProfileService.clear();
     await MonthlyMealPlanService.clear();
 
@@ -1398,6 +1500,8 @@ class AppState extends ChangeNotifier {
     manualShoppingItems.clear();
     hiddenShoppingItems.clear();
     kitchenAppliances.clear();
+    customRecipes.clear();
+    recipes = List<Recipe>.from(essentialRecipeLibrary);
     temperatureUnit = TemperatureUnit.celsius;
     for (final day in days) {
       _plan[day]?.clear();
@@ -2140,7 +2244,6 @@ class AppState extends ChangeNotifier {
     _savePantry();
     notifyListeners();
   }
-
   void restorePantryItem(PantryItem item) {
     final exists = pantryItems.any((value) => value.id == item.id);
     if (!exists) {
@@ -2169,6 +2272,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> addManualShoppingItem({
     required String name,
+    String brand = '',
     required double quantity,
     required String unit,
     required String category,
@@ -2183,6 +2287,7 @@ class AppState extends ChangeNotifier {
         key:
             'manual-${DateTime.now().microsecondsSinceEpoch}',
         name: trimmed,
+        brand: brand.trim(),
         quantity: quantity,
         unit: unit.trim().isEmpty ? 'each' : unit.trim(),
         category: category,
