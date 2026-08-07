@@ -21,7 +21,9 @@ void main() {
     expect(app, contains('kitchen_navigator_icon.png'));
     expect(app, contains('Your guide from pantry to plate.'));
 
-    expect(pubspec, contains('version: 12.0.0-alpha.1+38'));
+    // V12 release stages move through alpha, beta and RC builds.
+    // Guard the major version without pinning an obsolete Alpha 1 build.
+    expect(pubspec, contains(RegExp(r'version:\s*12\.0\.0-')));
     expect(pubspec, contains('google_fonts:'));
   });
 

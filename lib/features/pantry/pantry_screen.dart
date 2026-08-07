@@ -762,6 +762,16 @@ class _PantryHeader extends StatelessWidget {
                     'Stock predictions, planned demand and waste risk',
                     style: TextStyle(color: AppColors.muted),
                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 3,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      color: AppColors.pantry,
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.pill),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -778,9 +788,16 @@ class _PantryHeader extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             IconButton.filled(
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: onAdd,
               tooltip: 'Add product',
-              icon: const Icon(Icons.add),
+              icon: const Icon(
+                Icons.add,
+                color: Colors.white,
+              ),
             ),
           ],
         ),
@@ -813,12 +830,14 @@ class _PantryHeader extends StatelessWidget {
                         CircularProgressIndicator(
                           value: health / 100,
                           strokeWidth: 8,
+                          color: const Color(0xFFA9D6A5),
+                          backgroundColor: const Color(0xFF49624E),
                         ),
                         Center(
                           child: Text(
                             '$health%',
                             style: const TextStyle(
-                              color: AppColors.text,
+                              color: Color(0xFFFFF8E7),
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
                             ),
@@ -836,7 +855,7 @@ class _PantryHeader extends StatelessWidget {
                         const Text(
                           'PANTRY HEALTH',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: Color(0xFFA9D6A5),
                             fontSize: 11,
                             fontWeight: FontWeight.w900,
                             letterSpacing: .9,
@@ -846,7 +865,7 @@ class _PantryHeader extends StatelessWidget {
                         Text(
                           '$count products · $coveredUses planned uses',
                           style: const TextStyle(
-                            color: AppColors.text,
+                            color: Color(0xFFFFF8E7),
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
                           ),
@@ -855,7 +874,7 @@ class _PantryHeader extends StatelessWidget {
                         Text(
                           'Potential waste: €${estimatedWaste.toStringAsFixed(2)}',
                           style: const TextStyle(
-                            color: AppColors.muted,
+                            color: Color(0xFFD7E3D8),
                           ),
                         ),
                       ],

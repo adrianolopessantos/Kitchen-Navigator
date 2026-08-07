@@ -15,6 +15,8 @@ class RecipesScreen extends StatefulWidget {
 }
 
 class _RecipesScreenState extends State<RecipesScreen> {
+  final Set<String> selectedForCooking = <String>{};
+  bool cookTogetherMode = false;
   String category = 'All';
   String sort = 'Recommended';
   bool quickOnly = false;
@@ -101,6 +103,10 @@ class _RecipesScreenState extends State<RecipesScreen> {
                   const SizedBox(width: 8),
                   if (compact)
                     IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.recipes,
+                        foregroundColor: Colors.white,
+                      ),
                       tooltip: 'Add recipe',
                       onPressed: () => _showRecipeEditor(context),
                       icon: const Icon(Icons.add),
@@ -127,6 +133,96 @@ class _RecipesScreenState extends State<RecipesScreen> {
             'Scale recipes, check pantry availability, and find substitutions.',
             style: TextStyle(color: AppColors.muted),
           ),
+          const SizedBox(height: 10),
+          Container(
+            height: 3,
+            width: 54,
+            decoration: BoxDecoration(
+              color: AppColors.recipes,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.cooking,
+                side: BorderSide(
+                  color: cookTogetherMode
+                      ? AppColors.cooking
+                      : AppColors.border,
+                ),
+                backgroundColor: cookTogetherMode
+                    ? AppColors.cooking.withValues(alpha: .08)
+                    : AppColors.surface,
+              ),
+              onPressed: () {
+                setState(() {
+                  cookTogetherMode = !cookTogetherMode;
+                  if (!cookTogetherMode) {
+                    selectedForCooking.clear();
+                  }
+                });
+              },
+              icon: Icon(
+                cookTogetherMode
+                    ? Icons.close
+                    : Icons.soup_kitchen_outlined,
+              ),
+              label: Text(
+                cookTogetherMode
+                    ? 'Cancel Cook Together'
+                    : 'Cook Together · 2–4 meals',
+              ),
+            ),
+          ),
+          if (cookTogetherMode) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.cooking.withValues(alpha: .09),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(
+                  color: AppColors.cooking.withValues(alpha: .22),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.touch_app_outlined,
+                    color: AppColors.cooking,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      selectedForCooking.isEmpty
+                          ? 'Tap 2 to 4 recipe cards to select your meals.'
+                          : '${selectedForCooking.length} meal${selectedForCooking.length == 1 ? '' : 's'} selected',
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (selectedForCooking.length >= 2)
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.cooking,
+                        minimumSize: const Size(0, 40),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                        ),
+                      ),
+                      onPressed: () => _openCookTogether(context),
+                      child: const Text('Start'),
+                    ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           TextField(
             onChanged: state.setSearch,
@@ -232,6 +328,25 @@ class _RecipesScreenState extends State<RecipesScreen> {
                 onDelete: state.isCustomRecipe(recipe)
                     ? () => _deleteRecipe(context, recipe)
                     : null,
+                selectedForCooking:
+                    selectedForCooking.contains(recipe.id),
+                selectionMode: cookTogetherMode,
+                onToggleCooking: () {
+                  setState(() {
+                    if (!selectedForCooking.add(recipe.id)) {
+                      selectedForCooking.remove(recipe.id);
+                    } else if (selectedForCooking.length > 4) {
+                      selectedForCooking.remove(recipe.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Cook Together supports up to 4 meals.',
+                          ),
+                        ),
+                      );
+                    }
+                  });
+                },
               ),
             ),
         ],
@@ -239,6 +354,34 @@ class _RecipesScreenState extends State<RecipesScreen> {
     );
   }
 
+
+  Future<void> _openCookTogether(BuildContext context) async {
+    final state = AppScope.of(context);
+    final selected = state.recipes
+        .where((recipe) => selectedForCooking.contains(recipe.id))
+        .take(4)
+        .toList();
+
+    if (selected.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least 2 recipes to Cook Together.'),
+        ),
+      );
+      return;
+    }
+
+    await openMultiMealCookingAssistant(
+      context,
+      selected,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      selectedForCooking.clear();
+      cookTogetherMode = false;
+    });
+  }
 
   Future<void> _showRecipeEditor(
     BuildContext context, {
@@ -257,278 +400,721 @@ class _RecipesScreenState extends State<RecipesScreen> {
     final prepController = TextEditingController(
       text: (existing?.prepMinutes ?? 10).toString(),
     );
-    final ingredientsController = TextEditingController(
-      text: existing?.ingredients.join('\n') ?? '',
-    );
-    final stepsController = TextEditingController(
-      text: existing?.steps
-              .map((step) {
-                if (step.seconds > 0) {
-                  return '${step.instruction} | ${step.seconds ~/ 60} min';
-                }
-                return step.instruction;
-              })
-              .join('\n') ??
-          '',
-    );
     final notesController =
         TextEditingController(text: existing?.description ?? '');
+
+    final ingredientRows = existing == null
+        ? <_IngredientDraft>[_IngredientDraft()]
+        : existing.ingredients
+            .map(_ingredientDraftFromText)
+            .toList();
+
+    final stepRows = existing == null
+        ? <_StepDraft>[_StepDraft()]
+        : existing.steps
+            .map(_stepDraftFromRecipeStep)
+            .toList();
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: AppColors.surface,
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(sheetContext).height * .90,
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          existing == null
-                              ? 'Add your recipe'
-                              : 'Edit your recipe',
-                          style:
-                              Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'One ingredient and one step per line. For a timed step, add “| 10 min” after the instruction.',
-                          style: TextStyle(color: AppColors.muted),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: nameController,
-                          autofocus: existing == null,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Recipe name',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: categoryController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Category',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: cuisineController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Cuisine',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: servingsController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Servings',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: prepController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Prep minutes',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: ingredientsController,
-                          minLines: 4,
-                          maxLines: 9,
-                          textCapitalization:
-                              TextCapitalization.sentences,
-                          decoration: const InputDecoration(
-                            labelText: 'Ingredients',
-                            hintText:
-                                '500 g pasta\n2 tomatoes\n1 tbsp olive oil',
-                            alignLabelWithHint: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: stepsController,
-                          minLines: 5,
-                          maxLines: 11,
-                          textCapitalization:
-                              TextCapitalization.sentences,
-                          decoration: const InputDecoration(
-                            labelText: 'Steps',
-                            hintText:
-                                'Boil pasta | 10 min\nPrepare sauce | 5 min\nCombine and serve',
-                            alignLabelWithHint: true,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: notesController,
-                          minLines: 2,
-                          maxLines: 5,
-                          decoration: const InputDecoration(
-                            labelText: 'Notes (optional)',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border(
-                      top: BorderSide(color: AppColors.border),
-                    ),
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.recipes,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setModalState) => SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+            ),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(sheetContext).height * .92,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        18,
+                        16,
+                        28,
                       ),
-                      onPressed: () async {
-                        final name = nameController.text.trim();
-                        final ingredients = ingredientsController.text
-                            .split('\n')
-                            .map((value) => value.trim())
-                            .where((value) => value.isNotEmpty)
-                            .toList();
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            existing == null
+                                ? 'Build your recipe'
+                                : 'Edit your recipe',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Add ingredients with quantity and unit, then build each cooking step with an optional timer.',
+                            style: TextStyle(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: nameController,
+                            autofocus: existing == null,
+                            textCapitalization:
+                                TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              labelText: 'Recipe name',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller:
+                                      categoryController,
+                                  decoration:
+                                      const InputDecoration(
+                                    labelText: 'Category',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller:
+                                      cuisineController,
+                                  decoration:
+                                      const InputDecoration(
+                                    labelText: 'Cuisine',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller:
+                                      servingsController,
+                                  keyboardType:
+                                      TextInputType.number,
+                                  decoration:
+                                      const InputDecoration(
+                                    labelText: 'Servings',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: prepController,
+                                  keyboardType:
+                                      TextInputType.number,
+                                  decoration:
+                                      const InputDecoration(
+                                    labelText: 'Prep minutes',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 22),
+                          const _RecipeBuilderSectionTitle(
+                            icon: Icons.shopping_basket_outlined,
+                            title: 'Ingredients',
+                            subtitle:
+                                'Name, quantity and kitchen unit',
+                          ),
+                          const SizedBox(height: 10),
+                          ...List.generate(
+                            ingredientRows.length,
+                            (index) {
+                              final row =
+                                  ingredientRows[index];
+                              final units = <String>{
+                                ..._recipeUnits,
+                                row.unit,
+                              }.where(
+                                (value) => value.isNotEmpty,
+                              ).toList();
 
-                        final steps = stepsController.text
-                            .split('\n')
-                            .map((value) => value.trim())
-                            .where((value) => value.isNotEmpty)
-                            .map(_parseCustomStep)
-                            .toList();
-
-                        if (name.isEmpty ||
-                            ingredients.isEmpty ||
-                            steps.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Add a name, at least one ingredient and one step.',
+                              return Container(
+                                margin: const EdgeInsets.only(
+                                  bottom: 10,
+                                ),
+                                padding:
+                                    const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppColors.backgroundSoft,
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    AppRadius.medium,
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    TextField(
+                                      controller:
+                                          row.nameController,
+                                      textCapitalization:
+                                          TextCapitalization
+                                              .sentences,
+                                      decoration:
+                                          InputDecoration(
+                                        labelText:
+                                            'Ingredient ${index + 1}',
+                                        hintText:
+                                            'e.g. Chicken breast',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextField(
+                                            controller: row
+                                                .quantityController,
+                                            keyboardType:
+                                                const TextInputType
+                                                    .numberWithOptions(
+                                              decimal: true,
+                                            ),
+                                            decoration:
+                                                const InputDecoration(
+                                              labelText:
+                                                  'Quantity',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          flex: 3,
+                                          child:
+                                              DropdownButtonFormField<
+                                                  String>(
+                                            value: units
+                                                    .contains(
+                                                        row.unit)
+                                                ? row.unit
+                                                : 'each',
+                                            isExpanded: true,
+                                            decoration:
+                                                const InputDecoration(
+                                              labelText: 'Unit',
+                                            ),
+                                            items: units
+                                                .map(
+                                                  (unit) =>
+                                                      DropdownMenuItem(
+                                                    value: unit,
+                                                    child: Text(
+                                                      unit,
+                                                      overflow:
+                                                          TextOverflow
+                                                              .ellipsis,
+                                                    ),
+                                                  ),
+                                                )
+                                                .toList(),
+                                            onChanged: (value) {
+                                              if (value != null) {
+                                                setModalState(
+                                                  () => row.unit =
+                                                      value,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          tooltip:
+                                              'Remove ingredient',
+                                          onPressed:
+                                              ingredientRows.length <=
+                                                      1
+                                                  ? null
+                                                  : () =>
+                                                      setModalState(
+                                                        () {
+                                                          ingredientRows
+                                                              .removeAt(
+                                                            index,
+                                                          );
+                                                        },
+                                                      ),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  setModalState(
+                                () => ingredientRows.add(
+                                  _IngredientDraft(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text(
+                                'Add ingredient',
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 24),
+                          const _RecipeBuilderSectionTitle(
+                            icon: Icons.format_list_numbered,
+                            title: 'Cooking steps',
+                            subtitle:
+                                'Add an optional timer to each step',
+                          ),
+                          const SizedBox(height: 10),
+                          ...List.generate(
+                            stepRows.length,
+                            (index) {
+                              final row = stepRows[index];
+                              return Container(
+                                margin: const EdgeInsets.only(
+                                  bottom: 10,
+                                ),
+                                padding:
+                                    const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppColors.backgroundSoft,
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    AppRadius.medium,
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Step ${index + 1}',
+                                          style: const TextStyle(
+                                            color:
+                                                AppColors.recipes,
+                                            fontWeight:
+                                                FontWeight.w800,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        IconButton(
+                                          tooltip:
+                                              'Remove step',
+                                          onPressed:
+                                              stepRows.length <= 1
+                                                  ? null
+                                                  : () =>
+                                                      setModalState(
+                                                        () {
+                                                          stepRows
+                                                              .removeAt(
+                                                            index,
+                                                          );
+                                                        },
+                                                      ),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    TextField(
+                                      controller:
+                                          row.instructionController,
+                                      minLines: 2,
+                                      maxLines: 4,
+                                      textCapitalization:
+                                          TextCapitalization
+                                              .sentences,
+                                      decoration:
+                                          const InputDecoration(
+                                        labelText:
+                                            'Instruction',
+                                        hintText:
+                                            'e.g. Simmer the sauce',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextField(
+                                            controller:
+                                                row.timeController,
+                                            enabled:
+                                                row.timeUnit !=
+                                                    'No timer',
+                                            keyboardType:
+                                                TextInputType
+                                                    .number,
+                                            decoration:
+                                                const InputDecoration(
+                                              labelText: 'Time',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          flex: 3,
+                                          child:
+                                              DropdownButtonFormField<
+                                                  String>(
+                                            value:
+                                                row.timeUnit,
+                                            isExpanded: true,
+                                            decoration:
+                                                const InputDecoration(
+                                              labelText:
+                                                  'Timer unit',
+                                            ),
+                                            items:
+                                                _recipeTimeUnits
+                                                    .map(
+                                                      (unit) =>
+                                                          DropdownMenuItem(
+                                                        value: unit,
+                                                        child: Text(
+                                                          unit,
+                                                        ),
+                                                      ),
+                                                    )
+                                                    .toList(),
+                                            onChanged: (value) {
+                                              if (value != null) {
+                                                setModalState(
+                                                  () {
+                                                    row.timeUnit =
+                                                        value;
+                                                    if (value ==
+                                                        'No timer') {
+                                                      row.timeController
+                                                          .clear();
+                                                    }
+                                                  },
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  setModalState(
+                                () => stepRows.add(
+                                  _StepDraft(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add),
+                              label:
+                                  const Text('Add step'),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          TextField(
+                            controller: notesController,
+                            minLines: 2,
+                            maxLines: 5,
+                            decoration:
+                                const InputDecoration(
+                              labelText:
+                                  'Notes (optional)',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      10,
+                      16,
+                      12,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surface,
+                      border: Border(
+                        top: BorderSide(
+                          color: AppColors.border,
+                        ),
+                      ),
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor:
+                              AppColors.recipes,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () async {
+                          final name =
+                              nameController.text.trim();
+
+                          final ingredients =
+                              ingredientRows
+                                  .where(
+                                    (row) => row
+                                        .nameController
+                                        .text
+                                        .trim()
+                                        .isNotEmpty,
+                                  )
+                                  .map(
+                                    (row) {
+                                      final quantity = row
+                                              .quantityController
+                                              .text
+                                              .trim()
+                                              .isEmpty
+                                          ? '1'
+                                          : row
+                                              .quantityController
+                                              .text
+                                              .trim()
+                                              .replaceAll(
+                                                ',',
+                                                '.',
+                                              );
+                                      return '$quantity ${row.unit} '
+                                              '${row.nameController.text.trim()}'
+                                          .trim();
+                                    },
+                                  )
+                                  .toList();
+
+                          final steps = stepRows
+                              .where(
+                                (row) => row
+                                    .instructionController
+                                    .text
+                                    .trim()
+                                    .isNotEmpty,
+                              )
+                              .map(
+                                (row) => RecipeStep(
+                                  instruction: row
+                                      .instructionController
+                                      .text
+                                      .trim(),
+                                  seconds:
+                                      _secondsForStepDraft(
+                                    row,
+                                  ),
+                                ),
+                              )
+                              .toList();
+
+                          if (name.isEmpty ||
+                              ingredients.isEmpty ||
+                              steps.isEmpty) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Add a recipe name, at least one ingredient and one cooking step.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          final recipe = Recipe(
+                            id: existing?.id ??
+                                'custom-${DateTime.now().microsecondsSinceEpoch}',
+                            name: name,
+                            ingredients: ingredients,
+                            steps: steps,
+                            servings: int.tryParse(
+                                  servingsController.text,
+                                ) ??
+                                2,
+                            description:
+                                notesController.text.trim(),
+                            category: categoryController
+                                    .text
+                                    .trim()
+                                    .isEmpty
+                                ? 'Everyday'
+                                : categoryController.text
+                                    .trim(),
+                            cuisine: cuisineController
+                                    .text
+                                    .trim()
+                                    .isEmpty
+                                ? 'International'
+                                : cuisineController.text
+                                    .trim(),
+                            difficulty:
+                                existing?.difficulty ??
+                                    'Easy',
+                            prepMinutes: int.tryParse(
+                                  prepController.text,
+                                ) ??
+                                10,
+                            equipment:
+                                existing?.equipment ??
+                                    const [],
+                            temperatureCelsius:
+                                existing
+                                    ?.temperatureCelsius,
+                            tags: <String>{
+                              ...?existing?.tags,
+                              'Custom',
+                            }.toList(),
                           );
-                          return;
-                        }
 
-                        final recipe = Recipe(
-                          id: existing?.id ??
-                              'custom-${DateTime.now().microsecondsSinceEpoch}',
-                          name: name,
-                          ingredients: ingredients,
-                          steps: steps,
-                          servings:
-                              int.tryParse(servingsController.text) ?? 2,
-                          description: notesController.text.trim(),
-                          category:
-                              categoryController.text.trim().isEmpty
-                                  ? 'Everyday'
-                                  : categoryController.text.trim(),
-                          cuisine:
-                              cuisineController.text.trim().isEmpty
-                                  ? 'International'
-                                  : cuisineController.text.trim(),
-                          difficulty:
-                              existing?.difficulty ?? 'Easy',
-                          prepMinutes:
-                              int.tryParse(prepController.text) ?? 10,
-                          equipment:
-                              existing?.equipment ?? const [],
-                          temperatureCelsius:
-                              existing?.temperatureCelsius,
-                          tags: <String>{
-                            ...?existing?.tags,
-                            'Custom',
-                          }.toList(),
-                        );
+                          if (existing == null) {
+                            await state
+                                .addCustomRecipe(recipe);
+                          } else {
+                            await state
+                                .updateCustomRecipe(recipe);
+                          }
 
-                        if (existing == null) {
-                          await state.addCustomRecipe(recipe);
-                        } else {
-                          await state.updateCustomRecipe(recipe);
-                        }
-
-                        if (!mounted ||
-                            !sheetContext.mounted) {
-                          return;
-                        }
-                        Navigator.pop(sheetContext);
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.save_outlined),
-                      label: Text(
-                        existing == null
-                            ? 'Save recipe'
-                            : 'Save changes',
+                          if (!mounted ||
+                              !sheetContext.mounted) {
+                            return;
+                          }
+                          Navigator.pop(sheetContext);
+                          setState(() {});
+                        },
+                        icon:
+                            const Icon(Icons.save_outlined),
+                        label: Text(
+                          existing == null
+                              ? 'Save recipe'
+                              : 'Save changes',
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+
+    nameController.dispose();
+    categoryController.dispose();
+    cuisineController.dispose();
+    servingsController.dispose();
+    prepController.dispose();
+    notesController.dispose();
+    for (final row in ingredientRows) {
+      row.dispose();
+    }
+    for (final row in stepRows) {
+      row.dispose();
+    }
   }
 
-  RecipeStep _parseCustomStep(String value) {
-    final parts = value.split('|');
-    final instruction = parts.first.trim();
-    var seconds = 0;
+  _IngredientDraft _ingredientDraftFromText(String value) {
+    final match = RegExp(
+      r'^\s*(\d+(?:[.,]\d+)?)\s+([^\s]+)\s+(.+)$',
+    ).firstMatch(value.trim());
 
-    if (parts.length > 1) {
-      final timing = parts[1].trim().toLowerCase();
-      final match = RegExp(r'(\d+)').firstMatch(timing);
-      final amount = int.tryParse(match?.group(1) ?? '') ?? 0;
-
-      if (timing.contains('sec')) {
-        seconds = amount;
-      } else if (timing.contains('hour')) {
-        seconds = amount * 3600;
-      } else {
-        seconds = amount * 60;
-      }
+    if (match == null) {
+      return _IngredientDraft(
+        name: value.trim(),
+        quantity: '1',
+        unit: 'each',
+      );
     }
 
-    return RecipeStep(
-      instruction: instruction,
-      seconds: seconds,
+    return _IngredientDraft(
+      name: match.group(3)?.trim() ?? value.trim(),
+      quantity:
+          (match.group(1) ?? '1').replaceAll(',', '.'),
+      unit: match.group(2)?.trim() ?? 'each',
     );
+  }
+
+  _StepDraft _stepDraftFromRecipeStep(RecipeStep step) {
+    if (step.seconds <= 0) {
+      return _StepDraft(
+        instruction: step.instruction,
+        timeUnit: 'No timer',
+      );
+    }
+
+    if (step.seconds % 3600 == 0) {
+      return _StepDraft(
+        instruction: step.instruction,
+        time: '${step.seconds ~/ 3600}',
+        timeUnit: 'hours',
+      );
+    }
+
+    if (step.seconds % 60 == 0) {
+      return _StepDraft(
+        instruction: step.instruction,
+        time: '${step.seconds ~/ 60}',
+        timeUnit: 'minutes',
+      );
+    }
+
+    return _StepDraft(
+      instruction: step.instruction,
+      time: '${step.seconds}',
+      timeUnit: 'seconds',
+    );
+  }
+
+  int _secondsForStepDraft(_StepDraft row) {
+    if (row.timeUnit == 'No timer') return 0;
+
+    final amount =
+        int.tryParse(row.timeController.text.trim()) ?? 0;
+    if (amount <= 0) return 0;
+
+    switch (row.timeUnit) {
+      case 'hours':
+        return amount * 3600;
+      case 'minutes':
+        return amount * 60;
+      case 'seconds':
+      default:
+        return amount;
+    }
   }
 
   Future<void> _duplicateRecipe(
@@ -583,6 +1169,123 @@ class _RecipesScreenState extends State<RecipesScreen> {
 
 }
 
+
+const List<String> _recipeUnits = [
+  'g',
+  'kg',
+  'ml',
+  'L',
+  'tsp',
+  'tbsp',
+  'cup',
+  'each',
+  'piece',
+  'clove',
+  'slice',
+  'can',
+  'pack',
+];
+
+const List<String> _recipeTimeUnits = [
+  'No timer',
+  'seconds',
+  'minutes',
+  'hours',
+];
+
+class _IngredientDraft {
+  _IngredientDraft({
+    String name = '',
+    String quantity = '1',
+    this.unit = 'each',
+  })  : nameController = TextEditingController(text: name),
+        quantityController =
+            TextEditingController(text: quantity);
+
+  final TextEditingController nameController;
+  final TextEditingController quantityController;
+  String unit;
+
+  void dispose() {
+    nameController.dispose();
+    quantityController.dispose();
+  }
+}
+
+class _StepDraft {
+  _StepDraft({
+    String instruction = '',
+    String time = '',
+    this.timeUnit = 'No timer',
+  })  : instructionController =
+            TextEditingController(text: instruction),
+        timeController = TextEditingController(text: time);
+
+  final TextEditingController instructionController;
+  final TextEditingController timeController;
+  String timeUnit;
+
+  void dispose() {
+    instructionController.dispose();
+    timeController.dispose();
+  }
+}
+
+class _RecipeBuilderSectionTitle extends StatelessWidget {
+  const _RecipeBuilderSectionTitle({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.recipes.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            icon,
+            color: AppColors.recipes,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RecipeCard extends StatelessWidget {
   const _RecipeCard({
     required this.recipe,
@@ -590,9 +1293,15 @@ class _RecipeCard extends StatelessWidget {
     this.onEdit,
     this.onDuplicate,
     this.onDelete,
+    required this.selectedForCooking,
+    required this.selectionMode,
+    required this.onToggleCooking,
   });
 
   final Recipe recipe;
+  final bool selectedForCooking;
+  final bool selectionMode;
+  final VoidCallback onToggleCooking;
   final bool isCustom;
   final VoidCallback? onEdit;
   final VoidCallback? onDuplicate;
@@ -612,7 +1321,9 @@ class _RecipeCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () => _openDetails(context),
+        onTap: selectionMode
+            ? onToggleCooking
+            : () => _openDetails(context),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -668,6 +1379,21 @@ class _RecipeCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (selectionMode)
+                IconButton(
+                  tooltip: selectedForCooking
+                      ? 'Remove from Cook Together'
+                      : 'Select for Cook Together',
+                  onPressed: onToggleCooking,
+                  icon: Icon(
+                    selectedForCooking
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: selectedForCooking
+                        ? AppColors.cooking
+                        : AppColors.muted,
+                  ),
+                ),
               if (isCustom)
                 PopupMenuButton<String>(
                   tooltip: 'Manage custom recipe',

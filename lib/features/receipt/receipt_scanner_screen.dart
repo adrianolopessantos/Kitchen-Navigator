@@ -232,44 +232,131 @@ class _ReceiptScannerScreenState extends State<ReceiptScannerScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
           children: [
-            const Text(
-              'Receipt Scanner',
-              style: TextStyle(
-                color: AppColors.text,
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.shopping.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_outlined,
+                    color: AppColors.shopping,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Receipt Scanner',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.text,
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 5),
             const Text(
               'Capture the full receipt in good light. Correct every product before importing.',
               style: TextStyle(color: AppColors.muted),
             ),
+            const SizedBox(height: 12),
+            Container(
+              height: 3,
+              width: 54,
+              decoration: BoxDecoration(
+                color: AppColors.shopping,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+            ),
             const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _processing ? null : () => _capture(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 13),
-                      child: Text('Take photo'),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 370;
+
+                if (compact) {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: _processing
+                              ? null
+                              : () => _capture(ImageSource.camera),
+                          icon: const Icon(
+                            Icons.camera_alt_outlined,
+                          ),
+                          label: const Padding(
+                            padding:
+                                EdgeInsets.symmetric(vertical: 13),
+                            child: Text('Take photo'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _processing
+                              ? null
+                              : () => _capture(ImageSource.gallery),
+                          icon: const Icon(
+                            Icons.photo_library_outlined,
+                          ),
+                          label: const Padding(
+                            padding:
+                                EdgeInsets.symmetric(vertical: 13),
+                            child: Text('Choose from gallery'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _processing
+                            ? null
+                            : () => _capture(ImageSource.camera),
+                        icon: const Icon(
+                          Icons.camera_alt_outlined,
+                        ),
+                        label: const Padding(
+                          padding:
+                              EdgeInsets.symmetric(vertical: 13),
+                          child: Text('Take photo'),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _processing ? null : () => _capture(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 13),
-                      child: Text('Gallery'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _processing
+                            ? null
+                            : () => _capture(ImageSource.gallery),
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                        ),
+                        label: const Padding(
+                          padding:
+                              EdgeInsets.symmetric(vertical: 13),
+                          child: Text('Gallery'),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 12),
             Card(

@@ -2,17 +2,20 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Dashboard avoids misleading zero nutrition values', () {
+  test('Dashboard keeps current Version 12 nutrition behavior', () {
     final source = File(
       'lib/features/dashboard/dashboard_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains('Nutrition analysis pending'));
+    // V11 Beta 2.1 used the placeholder text
+    // "Nutrition analysis pending". Version 12 now uses real nutrition
+    // state plus the Insights entry, so guard the current behavior instead.
     expect(source, contains('state.hasTodaysNutrition'));
-    expect(source, contains('kcal household'));
+    expect(source, contains('Nutrition'));
+    expect(source, contains('openInsights(context)'));
     expect(
       source,
-      isNot(contains('state.todayNutrition.calories.round()')),
+      isNot(contains('Nutrition analysis pending')),
     );
   });
 }

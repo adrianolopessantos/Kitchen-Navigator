@@ -1,0 +1,122 @@
+KITCHEN NAVIGATOR V12 - BETA 1 DEVICE QA CHECKLIST
+Version 12.0.0-beta.1+49
+
+PURPOSE
+Beta 1 freezes major V12 feature development and verifies that the app is
+stable enough to become a Release Candidate.
+
+BEFORE TESTING
+[ ] Stop Flutter.
+[ ] Install this Beta 1 overlay after the working Alpha 9 + Pantry contrast fix.
+[ ] Run flutter pub get.
+[ ] Run flutter analyze --no-fatal-infos --no-fatal-warnings.
+[ ] Run flutter test.
+[ ] Launch on the Android test phone.
+
+1. TODAY
+[ ] Kitchen Navigator identity/logo correct.
+[ ] No bottom overflow.
+[ ] Greeting does not replace product identity.
+[ ] Insights opens.
+[ ] Back navigation works.
+
+2. SHOPPING
+[ ] Add item.
+[ ] Edit item.
+[ ] Brand visible on main shopping list.
+[ ] Quantity controls work.
+[ ] Mark purchased.
+[ ] Purchased item synchronizes correctly.
+[ ] Close/reopen app and verify list remains.
+[ ] No overflow.
+
+3. PANTRY
+[ ] Add item manually.
+[ ] Scanner opens.
+[ ] Edit product.
+[ ] Product details Save Changes remains visible.
+[ ] Pantry Health is readable.
+[ ] Health percentage is cream, not dark blue.
+[ ] Product/planned-use summary is cream.
+[ ] Close/reopen app and verify pantry remains.
+[ ] No overflow.
+
+4. RECIPES
+[ ] Built-in recipes open.
+[ ] Add custom recipe manually.
+[ ] Edit custom recipe.
+[ ] Delete custom recipe.
+[ ] Close/reopen app and verify custom recipe remains.
+[ ] Cook Together button visible.
+[ ] Select 2 meals.
+[ ] Select 4 meals.
+[ ] Fifth meal is rejected.
+[ ] No right overflow.
+
+5. PLANNER
+[ ] Add recipe to plan.
+[ ] Change day/meal.
+[ ] Monthly planning works.
+[ ] Close/reopen app and verify plan remains.
+[ ] No bottom/right overflow.
+
+6. SINGLE RECIPE COOKING
+[ ] Start cooking.
+[ ] Done/Next advances.
+[ ] Timed next step starts automatically.
+[ ] Pause/resume/reset timer.
+[ ] Voice works.
+[ ] Finish recipe.
+
+7. COOK TOGETHER
+[ ] Start with 2 meals.
+[ ] Independent timers work.
+[ ] Timed next steps auto-start.
+[ ] Timer alert identifies meal by name.
+[ ] Voice Guidance works.
+[ ] Repeat Focus works.
+[ ] Timer Alerts OFF works.
+[ ] Voice Guidance OFF works.
+[ ] Finish meals independently.
+
+8. RECEIPTS
+[ ] Receipt Scanner opens.
+[ ] No ~90 px right overflow.
+[ ] Take photo button works.
+[ ] Gallery button works.
+[ ] Back navigation works.
+
+9. INSIGHTS
+[ ] Budget card renders.
+[ ] Pantry card renders.
+[ ] Shopping card renders.
+[ ] Nutrition card renders.
+[ ] No compile/runtime error.
+[ ] Values broadly match their source pages.
+[ ] No overflow.
+
+10. APP LIFECYCLE
+[ ] Put app in background and restore it.
+[ ] Rotate if device rotation is enabled.
+[ ] Close app completely and reopen.
+[ ] Navigate repeatedly between all main tabs.
+[ ] Android back button behaves correctly.
+[ ] No red error screen.
+[ ] No yellow/black overflow stripes.
+
+BETA 1 PASS CRITERIA
+- flutter test passes.
+- No red runtime screens.
+- No visible RenderFlex overflow.
+- Core data survives app restart.
+- Shopping/Pantry/Planner/Recipes workflows remain usable.
+- Single and multi-meal cooking complete successfully.
+- Audio alerts identify the correct meal.
+
+If all checks pass:
+git add .
+git commit -m "Validate Kitchen Navigator Version 12 Beta 1"
+git push
+
+NEXT
+Beta 1 pass -> V12 Release Candidate 1.

@@ -13,7 +13,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'high-protein'],
-    ingredients: const ['Eggs', 'Butter', 'Salt', 'Black pepper'],
+    ingredients: const ['4 each Eggs', '15 g Butter', '1 pinch Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Crack the eggs into a bowl and whisk.', seconds: 60),
         RecipeStep(instruction: 'Melt butter in a non-stick pan over low heat.', seconds: 45),
@@ -32,7 +32,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'vegetarian'],
-    ingredients: const ['Eggs', 'Cheddar cheese', 'Butter', 'Salt', 'Black pepper'],
+    ingredients: const ['4 each Eggs', '60 g Cheddar cheese', '15 g Butter', '1 pinch Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Whisk eggs with salt and pepper.', seconds: 60),
         RecipeStep(instruction: 'Melt butter in a frying pan.', seconds: 45),
@@ -52,7 +52,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['vegetarian', 'family'],
-    ingredients: const ['Flour', 'Milk', 'Eggs', 'Butter', 'Baking powder', 'Sugar'],
+    ingredients: const ['200 g Flour', '300 ml Milk', '2 each Eggs', '30 g Butter', '2 tsp Baking powder', '1 tbsp Sugar'],
     steps: const [
         RecipeStep(instruction: 'Mix flour, baking powder, and sugar.', seconds: 90),
         RecipeStep(instruction: 'Whisk in milk and eggs until smooth.', seconds: 120),
@@ -71,7 +71,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'vegetarian'],
-    ingredients: const ['Bread', 'Eggs', 'Milk', 'Cinnamon', 'Butter'],
+    ingredients: const ['4 slice Bread', '2 each Eggs', '120 ml Milk', '1 tsp Cinnamon', '20 g Butter'],
     steps: const [
         RecipeStep(instruction: 'Whisk eggs, milk, and cinnamon.', seconds: 60),
         RecipeStep(instruction: 'Dip bread into the mixture.', seconds: 45),
@@ -90,7 +90,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Fridge'],
     temperatureCelsius: null,
     tags: const ['no-cook', 'vegetarian'],
-    ingredients: const ['Oats', 'Milk', 'Yogurt', 'Honey', 'Berries'],
+    ingredients: const ['100 g Oats', '200 ml Milk', '100 g Yogurt', '1 tbsp Honey', '80 g Berries'],
     steps: const [
         RecipeStep(instruction: 'Combine oats, milk, yogurt, and honey.', seconds: 90),
         RecipeStep(instruction: 'Refrigerate overnight.', seconds: 28800),
@@ -109,7 +109,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['vegetarian', 'quick'],
-    ingredients: const ['Oats', 'Milk', 'Banana', 'Honey', 'Cinnamon'],
+    ingredients: const ['100 g Oats', '400 ml Milk', '1 each Banana', '1 tbsp Honey', '1 tsp Cinnamon'],
     steps: const [
         RecipeStep(instruction: 'Heat oats and milk in a saucepan.', seconds: 120),
         RecipeStep(instruction: 'Simmer while stirring until creamy.', seconds: 300),
@@ -128,7 +128,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Toaster'],
     temperatureCelsius: null,
     tags: const ['vegan', 'quick'],
-    ingredients: const ['Bread', 'Avocado', 'Lemon', 'Salt', 'Black pepper'],
+    ingredients: const ['4 slice Bread', '2 each Avocado', '1 tbsp Lemon juice', '1 pinch Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Toast the bread.', seconds: 120),
         RecipeStep(instruction: 'Mash avocado with lemon, salt, and pepper.', seconds: 90),
@@ -147,7 +147,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['high-protein', 'family'],
-    ingredients: const ['Tortillas', 'Eggs', 'Cheddar cheese', 'Tomato', 'Onion', 'Beans'],
+    ingredients: const ['4 each Eggs', '4 each Tortilla', '100 g Black beans', '80 g Cheddar cheese', '100 g Tomato', '1 tbsp Olive oil'],
     steps: const [
         RecipeStep(instruction: 'Cook onion and tomato until softened.', seconds: 180),
         RecipeStep(instruction: 'Scramble eggs in the same pan.', seconds: 180),
@@ -167,7 +167,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Oven'],
     temperatureCelsius: 190,
     tags: const ['family', 'high-protein'],
-    ingredients: const ['Whole chicken', 'Olive oil', 'Garlic', 'Lemon', 'Rosemary', 'Salt'],
+    ingredients: const ['1 each Whole chicken', '2 tbsp Olive oil', '4 clove Garlic', '1 each Lemon', '1 tsp Salt', '1 tsp Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Heat the oven and season the chicken.', seconds: 300),
         RecipeStep(instruction: 'Place lemon, garlic, and rosemary inside.', seconds: 120),
@@ -187,7 +187,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Grill', 'Hob'],
     temperatureCelsius: null,
     tags: const ['high-protein', 'quick'],
-    ingredients: const ['Chicken breast', 'Olive oil', 'Paprika', 'Garlic', 'Salt', 'Black pepper'],
+    ingredients: const ['500 g Chicken breast', '1 tbsp Olive oil', '1 tsp Paprika', '1 tsp Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Coat chicken with oil and seasoning.', seconds: 180),
         RecipeStep(instruction: 'Preheat grill or pan.', seconds: 180),
@@ -207,7 +207,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['family', 'one-pot'],
-    ingredients: const ['Chicken breast', 'Onion', 'Garlic', 'Curry powder', 'Tomato', 'Coconut milk', 'Rice'],
+    ingredients: const ['500 g Chicken breast', '1 each Onion', '2 clove Garlic', '400 ml Coconut milk', '2 tbsp Curry powder', '1 tbsp Olive oil'],
     steps: const [
         RecipeStep(instruction: 'Cook onion and garlic until soft.', seconds: 240),
         RecipeStep(instruction: 'Add chicken and brown lightly.', seconds: 360),
@@ -228,7 +228,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['family', 'creamy'],
-    ingredients: const ['Chicken breast', 'Pasta', 'Cream', 'Parmesan', 'Garlic', 'Butter'],
+    ingredients: const ['400 g Chicken breast', '300 g Pasta', '250 ml Cream', '60 g Parmesan', '2 clove Garlic', '1 tbsp Olive oil'],
     steps: const [
         RecipeStep(instruction: 'Cook pasta until tender.', seconds: 600),
         RecipeStep(instruction: 'Cook sliced chicken in butter.', seconds: 480),
@@ -248,7 +248,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Oven'],
     temperatureCelsius: 200,
     tags: const ['family', 'mediterranean'],
-    ingredients: const ['Chicken thighs', 'Lemon', 'Garlic', 'Olive oil', 'Oregano', 'Potatoes'],
+    ingredients: const ['500 g Chicken breast', '1 each Lemon', '2 clove Garlic', '1 tbsp Olive oil', '1 tsp Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Season chicken and potatoes.', seconds: 240),
         RecipeStep(instruction: 'Arrange in a roasting dish.', seconds: 90),
@@ -267,7 +267,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'high-protein'],
-    ingredients: const ['Chicken breast', 'Bell pepper', 'Broccoli', 'Soy sauce', 'Garlic', 'Ginger', 'Rice'],
+    ingredients: const ['500 g Chicken breast', '1 each Bell pepper', '1 each Broccoli', '2 tbsp Soy sauce', '1 tbsp Olive oil', '2 clove Garlic'],
     steps: const [
         RecipeStep(instruction: 'Slice chicken and vegetables.', seconds: 300),
         RecipeStep(instruction: 'Stir fry chicken until nearly cooked.', seconds: 360),
@@ -287,7 +287,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['family', 'quick'],
-    ingredients: const ['Chicken breast', 'Bell pepper', 'Onion', 'Tortillas', 'Paprika', 'Lime'],
+    ingredients: const ['500 g Chicken breast', '8 each Tortilla', '2 each Bell pepper', '1 each Onion', '1 tbsp Olive oil', '2 tsp Fajita seasoning'],
     steps: const [
         RecipeStep(instruction: 'Slice chicken, pepper, and onion.', seconds: 300),
         RecipeStep(instruction: 'Season chicken with paprika and lime.', seconds: 120),
@@ -307,7 +307,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob', 'Oven'],
     temperatureCelsius: 190,
     tags: const ['family', 'comfort-food'],
-    ingredients: const ['Chicken breast', 'Breadcrumbs', 'Eggs', 'Tomato sauce', 'Mozzarella', 'Parmesan'],
+    ingredients: const ['500 g Chicken breast', '100 g Breadcrumbs', '60 g Parmesan', '200 g Tomato sauce', '120 g Mozzarella', '1 each Egg'],
     steps: const [
         RecipeStep(instruction: 'Coat chicken in egg and breadcrumbs.', seconds: 300),
         RecipeStep(instruction: 'Brown chicken lightly in a pan.', seconds: 360),
@@ -327,7 +327,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob', 'Slow cooker'],
     temperatureCelsius: null,
     tags: const ['one-pot', 'family'],
-    ingredients: const ['Beef', 'Onion', 'Carrots', 'Potatoes', 'Beef stock', 'Tomato paste'],
+    ingredients: const ['600 g Beef', '3 each Potato', '2 each Carrot', '1 each Onion', '750 ml Beef stock', '2 tbsp Flour'],
     steps: const [
         RecipeStep(instruction: 'Brown the beef in batches.', seconds: 600),
         RecipeStep(instruction: 'Cook onion and carrots.', seconds: 300),
@@ -347,7 +347,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['family', 'batch-cook'],
-    ingredients: const ['Beef mince', 'Spaghetti', 'Onion', 'Garlic', 'Tomato', 'Carrots'],
+    ingredients: const ['400 g Spaghetti', '500 g Ground beef', '400 g Canned tomatoes', '1 each Onion', '2 clove Garlic', '1 tbsp Olive oil'],
     steps: const [
         RecipeStep(instruction: 'Cook onion, garlic, and carrots.', seconds: 300),
         RecipeStep(instruction: 'Add mince and brown.', seconds: 480),
@@ -367,7 +367,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['family', 'batch-cook'],
-    ingredients: const ['Beef mince', 'Breadcrumbs', 'Eggs', 'Parmesan', 'Tomato sauce', 'Garlic'],
+    ingredients: const ['500 g Ground beef', '80 g Breadcrumbs', '1 each Egg', '40 g Parmesan', '2 clove Garlic', '400 g Tomato sauce'],
     steps: const [
         RecipeStep(instruction: 'Mix mince, breadcrumbs, egg, and parmesan.', seconds: 300),
         RecipeStep(instruction: 'Shape into meatballs.', seconds: 300),
@@ -387,7 +387,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'high-protein'],
-    ingredients: const ['Beef strips', 'Bell pepper', 'Broccoli', 'Soy sauce', 'Ginger', 'Noodles'],
+    ingredients: const ['500 g Beef', '1 each Bell pepper', '1 each Broccoli', '2 tbsp Soy sauce', '1 tbsp Olive oil', '2 clove Garlic'],
     steps: const [
         RecipeStep(instruction: 'Cook noodles and drain.', seconds: 480),
         RecipeStep(instruction: 'Stir fry beef quickly.', seconds: 300),
@@ -407,7 +407,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob', 'Oven'],
     temperatureCelsius: 200,
     tags: const ['family', 'comfort-food'],
-    ingredients: const ['Beef mince', 'Onion', 'Carrots', 'Peas', 'Potatoes', 'Butter', 'Beef stock'],
+    ingredients: const ['500 g Ground beef', '800 g Potato', '2 each Carrot', '1 each Onion', '300 ml Beef stock', '30 g Butter'],
     steps: const [
         RecipeStep(instruction: 'Boil and mash potatoes with butter.', seconds: 1200),
         RecipeStep(instruction: 'Cook mince, onion, and carrots.', seconds: 600),
@@ -427,7 +427,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['one-pot', 'batch-cook'],
-    ingredients: const ['Beef mince', 'Kidney beans', 'Tomato', 'Onion', 'Garlic', 'Chili powder', 'Rice'],
+    ingredients: const ['500 g Ground beef', '400 g Kidney beans', '400 g Canned tomatoes', '1 each Onion', '2 clove Garlic', '2 tsp Chili powder'],
     steps: const [
         RecipeStep(instruction: 'Cook onion, garlic, and mince.', seconds: 600),
         RecipeStep(instruction: 'Add chili powder and tomato.', seconds: 120),
@@ -447,7 +447,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Oven', 'Air fryer'],
     temperatureCelsius: 180,
     tags: const ['high-protein', 'quick'],
-    ingredients: const ['Salmon fillets', 'Lemon', 'Olive oil', 'Garlic', 'Broccoli'],
+    ingredients: const ['500 g Salmon', '1 each Lemon', '1 tbsp Olive oil', '2 clove Garlic', '1 tsp Salt', '1 pinch Black pepper'],
     steps: const [
         RecipeStep(instruction: 'Season salmon with lemon, oil, and garlic.', seconds: 180),
         RecipeStep(instruction: 'Place salmon and broccoli on a tray.', seconds: 120),
@@ -466,7 +466,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Oven', 'Air fryer'],
     temperatureCelsius: 200,
     tags: const ['family', 'comfort-food'],
-    ingredients: const ['White fish', 'Potatoes', 'Flour', 'Eggs', 'Breadcrumbs', 'Lemon'],
+    ingredients: const ['500 g White fish', '600 g Potato', '150 g Flour', '200 ml Sparkling water', '1 tsp Salt', '2 tbsp Olive oil'],
     steps: const [
         RecipeStep(instruction: 'Cut potatoes and season.', seconds: 300),
         RecipeStep(instruction: 'Coat fish in flour, egg, and breadcrumbs.', seconds: 300),
@@ -486,7 +486,7 @@ const List<Recipe> essentialRecipeLibrary = [
     equipment: const ['Hob'],
     temperatureCelsius: null,
     tags: const ['quick', 'pantry'],
-    ingredients: const ['Pasta', 'Tuna', 'Tomato', 'Onion', 'Garlic', 'Olive oil'],
+    ingredients: const ['300 g Pasta', '2 can Tuna', '200 g Tomato sauce', '1 each Onion', '1 tbsp Olive oil', '40 g Parmesan'],
     steps: const [
         RecipeStep(instruction: 'Cook pasta.', seconds: 600),
         RecipeStep(instruction: 'Cook onion and garlic.', seconds: 240),

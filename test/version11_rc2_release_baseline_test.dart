@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Version 11 RC2 release baseline is present', () {
+  test('Version 12 release baseline is present', () {
     final app = File('lib/app.dart').readAsStringSync();
     final dashboard = File(
       'lib/features/dashboard/dashboard_screen.dart',
@@ -21,8 +21,10 @@ void main() {
     ).readAsStringSync();
 
     expect(app, contains('PlannerScreen'));
+
     expect(dashboard, contains('_scanFromDashboard'));
     expect(dashboard, contains("title: 'Kitchen overview'"));
+    expect(dashboard, contains('openInsights(context)'));
 
     expect(shopping, contains('setShoppingPurchased'));
     expect(shopping, contains('setShoppingMonthView'));
@@ -31,11 +33,15 @@ void main() {
 
     expect(pantry, contains('_CompactPantryRow'));
     expect(pantry, contains('_showPantryDetails'));
+    expect(pantry, contains('_scanIntoPantry'));
 
     expect(recipes, contains('30 min or less'));
     expect(recipes, contains('Add missing'));
     expect(recipes, contains('Cook'));
-    expect(recipes, contains('addManualShoppingItem'));
+    expect(recipes, contains('addCustomRecipe'));
+    expect(recipes, contains('updateCustomRecipe'));
+    expect(recipes, contains('Cook Together · 2–4 meals'));
+    expect(recipes, contains('openCookingAssistant'));
 
     expect(planner, contains('shoppingItemsForWeek'));
     expect(planner, contains('openShopping'));

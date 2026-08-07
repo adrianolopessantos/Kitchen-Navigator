@@ -1,0 +1,75 @@
+KITCHEN NAVIGATOR V12 — BETA 1.3 FINAL QA FREEZE
+Version 12.0.0-beta.1+52
+
+NO NEW FEATURES AFTER THIS POINT UNLESS A RELEASE-BLOCKING BUG IS FOUND.
+
+AUTOMATED
+[ ] flutter pub get
+[ ] flutter analyze --no-fatal-infos --no-fatal-warnings
+[ ] flutter test
+
+PHONE — CORE DATA
+[ ] Add Shopping item -> restart app -> item remains
+[ ] Add Pantry item -> restart app -> item remains
+[ ] Create custom recipe -> restart app -> recipe remains
+[ ] Edit custom recipe -> restart app -> edit remains
+[ ] Planner change -> restart app -> plan remains
+
+PHONE — RECIPE BUILDER
+[ ] Add ingredient with g
+[ ] Add ingredient with tbsp
+[ ] Add ingredient with piece/each
+[ ] Add timed step in seconds
+[ ] Add timed step in minutes
+[ ] Add untimed step
+[ ] Save / reopen recipe
+[ ] No keyboard or bottom overflow
+
+PHONE — SINGLE COOKING
+[ ] Done/Next works
+[ ] Timed next step starts automatically
+[ ] Pause / resume / reset
+[ ] Finish recipe
+
+PHONE — COOK TOGETHER
+[ ] Button clearly visible
+[ ] Select 2 meals
+[ ] Select 4 meals
+[ ] 5th meal rejected
+[ ] Independent timers
+[ ] Voice Guidance
+[ ] Timer alert names correct meal
+[ ] Repeat Focus
+[ ] Finish meals independently
+
+PHONE — SHOPPING / PANTRY
+[ ] Brand visible
+[ ] Quantity controls
+[ ] Purchased synchronization
+[ ] Pantry scanner
+[ ] Pantry Health percentage easy to read
+[ ] Product/planned-use text easy to read
+[ ] Pantry + button clearly visible
+
+PHONE — RECEIPTS / INSIGHTS
+[ ] Receipt Scanner no right overflow
+[ ] Camera / Gallery controls visible
+[ ] Insights opens
+[ ] Budget / Pantry / Shopping / Nutrition render
+[ ] No runtime error
+
+PHONE — GENERAL
+[ ] No red error screens
+[ ] No yellow/black overflow warnings
+[ ] Android Back works
+[ ] App resumes from background
+[ ] App survives full close/reopen
+[ ] Launcher icon still correct
+
+PASS:
+If every item above passes, V12 is ready for Release Candidate 1.
+
+Commit after pass:
+git add .
+git commit -m "Complete V12 Beta 1.3 final QA freeze"
+git push

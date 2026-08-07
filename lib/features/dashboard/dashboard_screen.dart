@@ -8,6 +8,7 @@ import '../barcode/barcode_scanner_screen.dart';
 import '../budget/budget_screen.dart';
 import '../expiry/expiry_screen.dart';
 import '../inventory/inventory_intelligence_screen.dart';
+import '../insights/insights_screen.dart';
 import '../kitchens/kitchens_screen.dart';
 import '../nutrition/nutrition_screen.dart';
 import '../settings/settings_screen.dart';
@@ -206,6 +207,56 @@ class DashboardScreen extends StatelessWidget {
                   ],
                 ),
 
+                const SizedBox(height: AppSpacing.md),
+                Card(
+                  color: AppColors.info.withValues(alpha: .035),
+                  child: InkWell(
+                    onTap: () => openInsights(context),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: 14,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.insights_outlined,
+                            color: AppColors.info,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Insights',
+                                  style: TextStyle(
+                                    color: AppColors.text,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Budget, pantry, shopping and nutrition in one place',
+                                  style: TextStyle(
+                                    color: AppColors.muted,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: AppColors.info,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.md),
                 _AttentionStrip(
                   pantryHealth: state.pantryHealthScore,

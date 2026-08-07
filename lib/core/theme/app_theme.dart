@@ -148,8 +148,8 @@ abstract final class AppTheme {
       cardTheme: const CardThemeData(
         color: AppColors.surface,
         surfaceTintColor: Colors.transparent,
-        shadowColor: Color(0x18000000),
-        elevation: 1.5,
+        shadowColor: Color(0x12000000),
+        elevation: 1.0,
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
@@ -160,7 +160,7 @@ abstract final class AppTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 76,
+        height: 72,
         elevation: 0,
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
@@ -280,6 +280,30 @@ abstract final class AppTheme {
         labelStyle: GoogleFonts.poppins(
           color: AppColors.text,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+      iconTheme: const IconThemeData(
+        size: 22,
+        color: AppColors.muted,
+      ),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 2,
+        ),
+        minLeadingWidth: 34,
+        iconColor: AppColors.primary,
+        textColor: AppColors.text,
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColors.primaryStrong,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
+        textStyle: GoogleFonts.poppins(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(

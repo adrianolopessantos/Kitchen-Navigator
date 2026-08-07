@@ -30,6 +30,8 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
   int originalSeconds = 0;
   bool timerRunning = false;
   bool cookingStarted = false;
+  bool timerAutoStarted = false;
+  int completedSteps = 0;
   Timer? timer;
   final VoiceCookingService voiceService = VoiceCookingService();
   bool voiceReady = false;
@@ -160,6 +162,7 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
     setState(() {
       cookingStarted = true;
       currentStep = 0;
+      completedSteps = 0;
       _loadStepTimer();
     });
     _speakCurrentStep();
@@ -170,22 +173,18 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
     originalSeconds = step.seconds;
     remainingSeconds = step.seconds;
     timerRunning = false;
+    timerAutoStarted = false;
   }
 
-  void toggleTimer() {
-    if (remainingSeconds <= 0 && originalSeconds > 0) {
-      setState(() => remainingSeconds = originalSeconds);
-    }
+  void _startCurrentTimer({bool automatic = false}) {
+    if (remainingSeconds <= 0 || timerRunning) return;
 
-    if (timerRunning) {
-      timer?.cancel();
-      setState(() => timerRunning = false);
-      return;
-    }
+    setState(() {
+      timerRunning = true;
+      timerAutoStarted = automatic;
+    });
 
-    if (remainingSeconds <= 0) return;
-
-    setState(() => timerRunning = true);
+    timer?.cancel();
     timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (remainingSeconds <= 1) {
@@ -201,11 +200,33 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
     });
   }
 
+  void _autoStartCurrentStepTimer() {
+    if (step.seconds <= 0) return;
+    _startCurrentTimer(automatic: true);
+  }
+
+  void toggleTimer() {
+    if (remainingSeconds <= 0 && originalSeconds > 0) {
+      setState(() => remainingSeconds = originalSeconds);
+    }
+
+    if (timerRunning) {
+      timer?.cancel();
+      setState(() => timerRunning = false);
+      return;
+    }
+
+    if (remainingSeconds <= 0) return;
+
+    _startCurrentTimer();
+  }
+
   void resetTimer() {
     timer?.cancel();
     setState(() {
       remainingSeconds = originalSeconds;
       timerRunning = false;
+      timerAutoStarted = false;
     });
   }
 
@@ -237,6 +258,7 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
     timer?.cancel();
     setState(() {
       currentStep--;
+      completedSteps = currentStep;
       _loadStepTimer();
     });
     _speakCurrentStep();
@@ -250,10 +272,15 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
 
     timer?.cancel();
     setState(() {
+      completedSteps = (currentStep + 1).clamp(
+        0,
+        widget.recipe.steps.length,
+      );
       currentStep++;
       _loadStepTimer();
     });
     _speakCurrentStep();
+    _autoStartCurrentStepTimer();
   }
 
   Future<void> _finishRecipe() async {
@@ -298,7 +325,23 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.recipe.name),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.soup_kitchen_outlined,
+              color: AppColors.cooking,
+              size: 21,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                widget.recipe.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (cookingStarted)
             Padding(
@@ -483,6 +526,44 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 34),
       children: [
+        Card(
+          color: AppColors.cooking.withValues(alpha: .08),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 11,
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.soup_kitchen_outlined,
+                  color: AppColors.cooking,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Cooking session · ${currentStep + 1}/${widget.recipe.steps.length}',
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${((currentStep + 1) / widget.recipe.steps.length * 100).round()}%',
+                  style: const TextStyle(
+                    color: AppColors.cooking,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
         Text(
           'STEP ${currentStep + 1}',
           textAlign: TextAlign.center,
@@ -533,7 +614,40 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
+                  if (timerRunning && timerAutoStarted)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.cooking.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(
+                          AppRadius.pill,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 14,
+                            color: AppColors.cooking,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'Timer started automatically',
+                            style: TextStyle(
+                              color: AppColors.cooking,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -674,7 +788,9 @@ class _CookingAssistantScreenState extends State<CookingAssistantScreen> {
                   child: Text(
                     currentStep == widget.recipe.steps.length - 1
                         ? 'Finish recipe'
-                        : 'Done — next step',
+                        : widget.recipe.steps[currentStep + 1].seconds > 0
+                            ? 'Done — next + start timer'
+                            : 'Done — next step',
                   ),
                 ),
               ),
@@ -843,6 +959,478 @@ Future<bool?> openCookingAssistant(
       builder: (_) => CookingAssistantScreen(
         recipe: recipe,
         servings: servings ?? recipe.servings,
+      ),
+    ),
+  );
+}
+
+
+class MultiMealCookingAssistantScreen extends StatefulWidget {
+  const MultiMealCookingAssistantScreen({
+    super.key,
+    required this.recipes,
+  });
+
+  final List<Recipe> recipes;
+
+  @override
+  State<MultiMealCookingAssistantScreen> createState() =>
+      _MultiMealCookingAssistantScreenState();
+}
+
+class _MealCookingState {
+  _MealCookingState(this.recipe)
+      : remainingSeconds =
+            recipe.steps.isEmpty ? 0 : recipe.steps.first.seconds;
+
+  final Recipe recipe;
+  int stepIndex = 0;
+  int remainingSeconds;
+  bool timerRunning = false;
+  bool finished = false;
+
+  RecipeStep? get step =>
+      recipe.steps.isEmpty || finished ? null : recipe.steps[stepIndex];
+}
+
+class _MultiMealCookingAssistantScreenState
+    extends State<MultiMealCookingAssistantScreen> {
+  late final List<_MealCookingState> meals;
+  Timer? ticker;
+  final VoiceCookingService multiMealVoiceService =
+      VoiceCookingService();
+  bool soundAlerts = true;
+  bool spokenGuidance = true;
+  String? lastFocusMealId;
+
+  @override
+  void initState() {
+    super.initState();
+    meals = widget.recipes
+        .take(4)
+        .map(_MealCookingState.new)
+        .toList();
+    multiMealVoiceService.initialize();
+    ticker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _tick(),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _announceFocusIfChanged();
+    });
+  }
+
+  @override
+  void dispose() {
+    ticker?.cancel();
+    super.dispose();
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    var changed = false;
+    final finishedTimers = <_MealCookingState>[];
+
+    for (final meal in meals) {
+      if (!meal.timerRunning || meal.remainingSeconds <= 0) continue;
+      meal.remainingSeconds--;
+      changed = true;
+      if (meal.remainingSeconds <= 0) {
+        meal.timerRunning = false;
+        finishedTimers.add(meal);
+      }
+    }
+
+    if (changed) {
+      setState(() {});
+      for (final meal in finishedTimers) {
+        _announceTimerFinished(meal);
+      }
+      _announceFocusIfChanged();
+    }
+  }
+
+  Future<void> _announceTimerFinished(
+    _MealCookingState meal,
+  ) async {
+    if (!soundAlerts) return;
+
+    await multiMealVoiceService.speak(
+      '${meal.recipe.name} timer finished.',
+    );
+  }
+
+  Future<void> _announceFocusIfChanged() async {
+    if (!spokenGuidance) return;
+    final focus = nextMeal;
+    if (focus == null || focus.recipe.id == lastFocusMealId) return;
+
+    lastFocusMealId = focus.recipe.id;
+    final instruction = focus.step?.instruction ?? '';
+    await multiMealVoiceService.speak(
+      'Focus now. ${focus.recipe.name}. $instruction',
+    );
+  }
+
+  Future<void> _repeatFocus() async {
+    final focus = nextMeal;
+    if (focus == null) return;
+    final instruction = focus.step?.instruction ?? '';
+    await multiMealVoiceService.speak(
+      '${focus.recipe.name}. $instruction',
+    );
+  }
+
+  void _next(_MealCookingState meal) {
+    if (meal.finished) return;
+
+    if (meal.stepIndex >= meal.recipe.steps.length - 1) {
+      setState(() {
+        meal.finished = true;
+        meal.timerRunning = false;
+        meal.remainingSeconds = 0;
+      });
+      if (soundAlerts) {
+        multiMealVoiceService.speak(
+          '${meal.recipe.name} is complete.',
+        );
+      }
+      _announceFocusIfChanged();
+      return;
+    }
+
+    setState(() {
+      meal.stepIndex++;
+      meal.remainingSeconds = meal.step?.seconds ?? 0;
+      meal.timerRunning = meal.remainingSeconds > 0;
+    });
+    _announceFocusIfChanged();
+  }
+
+  void _toggleTimer(_MealCookingState meal) {
+    if (meal.remainingSeconds <= 0) return;
+    setState(() => meal.timerRunning = !meal.timerRunning);
+  }
+
+  _MealCookingState? get nextMeal {
+    final active = meals.where((meal) => !meal.finished).toList();
+    if (active.isEmpty) return null;
+
+    active.sort((a, b) {
+      final aPriority = a.timerRunning
+          ? a.remainingSeconds
+          : (a.remainingSeconds > 0 ? a.remainingSeconds + 100000 : 0);
+      final bPriority = b.timerRunning
+          ? b.remainingSeconds
+          : (b.remainingSeconds > 0 ? b.remainingSeconds + 100000 : 0);
+      return aPriority.compareTo(bPriority);
+    });
+    return active.first;
+  }
+
+  String _time(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${remainder.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final focus = nextMeal;
+    final finished = meals.where((meal) => meal.finished).length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cook Together'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            Card(
+              color: AppColors.cooking.withValues(alpha: .10),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.soup_kitchen_outlined,
+                      color: AppColors.cooking,
+                      size: 30,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            focus == null
+                                ? 'All meals complete'
+                                : 'Focus now · ${focus.recipe.name}',
+                            style: const TextStyle(
+                              color: AppColors.text,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            focus == null
+                                ? 'Everything is ready.'
+                                : focus.step?.instruction ?? '',
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '$finished/${meals.length}',
+                      style: const TextStyle(
+                        color: AppColors.cooking,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilterChip(
+                      selected: soundAlerts,
+                      onSelected: (value) =>
+                          setState(() => soundAlerts = value),
+                      avatar: Icon(
+                        soundAlerts
+                            ? Icons.volume_up_outlined
+                            : Icons.volume_off_outlined,
+                        size: 17,
+                      ),
+                      label: const Text('Timer alerts'),
+                    ),
+                    FilterChip(
+                      selected: spokenGuidance,
+                      onSelected: (value) {
+                        setState(() => spokenGuidance = value);
+                        if (value) {
+                          lastFocusMealId = null;
+                          _announceFocusIfChanged();
+                        }
+                      },
+                      avatar: Icon(
+                        spokenGuidance
+                            ? Icons.record_voice_over_outlined
+                            : Icons.voice_over_off_outlined,
+                        size: 17,
+                      ),
+                      label: const Text('Voice guidance'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _repeatFocus,
+                      icon: const Icon(Icons.replay, size: 17),
+                      label: const Text('Repeat focus'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (final meal in meals) ...[
+              _MultiMealCard(
+                meal: meal,
+                formatTime: _time,
+                onNext: () => _next(meal),
+                onToggleTimer: () => _toggleTimer(meal),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MultiMealCard extends StatelessWidget {
+  const _MultiMealCard({
+    required this.meal,
+    required this.formatTime,
+    required this.onNext,
+    required this.onToggleTimer,
+  });
+
+  final _MealCookingState meal;
+  final String Function(int) formatTime;
+  final VoidCallback onNext;
+  final VoidCallback onToggleTimer;
+
+  @override
+  Widget build(BuildContext context) {
+    final step = meal.step;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    meal.recipe.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (!meal.finished)
+                  Text(
+                    '${meal.stepIndex + 1}/${meal.recipe.steps.length}',
+                    style: const TextStyle(
+                      color: AppColors.cooking,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (meal.finished)
+              const Row(
+                children: [
+                  Icon(Icons.check_circle, color: AppColors.success),
+                  SizedBox(width: 7),
+                  Text(
+                    'Meal complete',
+                    style: TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              )
+            else ...[
+              Text(
+                step?.instruction ?? '',
+                style: const TextStyle(color: AppColors.text),
+              ),
+              if ((step?.seconds ?? 0) > 0) ...[
+                const SizedBox(height: 10),
+                if (meal.remainingSeconds == 0 &&
+                    !meal.timerRunning)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: .12),
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.medium),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.notifications_active_outlined,
+                          color: AppColors.warning,
+                          size: 18,
+                        ),
+                        SizedBox(width: 7),
+                        Text(
+                          'Timer finished · action needed',
+                          style: TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Row(
+                  children: [
+                    Text(
+                      formatTime(meal.remainingSeconds),
+                      style: const TextStyle(
+                        color: AppColors.cooking,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        fontFeatures: [
+                          FontFeature.tabularFigures(),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton.filledTonal(
+                      tooltip:
+                          meal.timerRunning ? 'Pause timer' : 'Start timer',
+                      onPressed: onToggleTimer,
+                      icon: Icon(
+                        meal.timerRunning
+                            ? Icons.pause
+                            : Icons.play_arrow,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onNext,
+                  icon: Icon(
+                    meal.stepIndex >= meal.recipe.steps.length - 1
+                        ? Icons.check
+                        : Icons.arrow_forward,
+                  ),
+                  label: Text(
+                    meal.stepIndex >= meal.recipe.steps.length - 1
+                        ? 'Finish meal'
+                        : (meal.recipe.steps[meal.stepIndex + 1].seconds > 0
+                            ? 'Done · next + start timer'
+                            : 'Done · next step'),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<bool?> openMultiMealCookingAssistant(
+  BuildContext context,
+  List<Recipe> recipes,
+) {
+  final selected = recipes.take(4).toList();
+  if (selected.length < 2) return Future<bool?>.value(false);
+
+  return Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) => MultiMealCookingAssistantScreen(
+        recipes: selected,
       ),
     ),
   );

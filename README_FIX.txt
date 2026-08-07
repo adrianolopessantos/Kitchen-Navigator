@@ -1,37 +1,26 @@
-Kitchen Navigator v12 Alpha 6 - Horizontal Overflow Fix
+Kitchen Navigator V12 Beta 1.3 - Dashboard V11 Sync Test Fix
 
-Fixes the RenderFlex overflow on narrow Android screens.
+Cause:
+The old Version 11 dashboard regression test required:
+  state.estimatedMonthlyPlanShoppingTotal
+  state.householdProfile.monthlyBudget
 
-Recipes:
-- Header is now responsive using LayoutBuilder.
-- On narrower screens, Add Recipe becomes a compact + icon button.
-- Long header text ellipsizes safely.
-- Recipe filters now use Wrap instead of forcing everything into one Row.
-- 30 min / My recipes / sort control can flow to another line.
+Version 12 now uses the weekly shopping calculation directly:
+  state.estimatedShoppingTotalForWeek
+  state.weeklyShoppingBudget
 
-Planner:
-- Custom-recipe labels are allowed to ellipsize safely.
+and exposes deeper analysis through:
+  openInsights(context)
 
-Resolves:
-- A RenderFlex overflowed by ~90 pixels on the right.
+Fix:
+Updates only the stale regression test. No application code changes.
 
 Install:
 1. Extract ZIP.
-2. Copy lib and test into:
+2. Copy the test folder into:
    C:\Projects\KitchenNavigator
-3. Merge / Replace.
+3. Replace the existing test file.
 4. Run:
+   C:\src\flutter\bin\flutter.bat test test\dashboard_v11_sync_test.dart
+5. If it passes:
    C:\src\flutter\bin\flutter.bat test
-   C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
-
-Phone test:
-- Open Recipes.
-- Confirm no yellow/black right-overflow stripe.
-- Rotate / resize if possible.
-- Test My recipes, 30 min filter and sort.
-- Confirm Add Recipe remains accessible.
-
-After successful testing:
-   git add lib test
-   git commit -m "Fix Alpha 6 recipe header overflow"
-   git push
