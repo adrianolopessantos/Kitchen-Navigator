@@ -1350,6 +1350,65 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool isCustomRecipe(Recipe recipe) {
+    return customRecipes.any((item) => item.id == recipe.id);
+  }
+
+  Future<void> updateCustomRecipe(Recipe recipe) async {
+    final customIndex =
+        customRecipes.indexWhere((item) => item.id == recipe.id);
+    if (customIndex < 0) return;
+
+    customRecipes[customIndex] = recipe;
+
+    final recipeIndex =
+        recipes.indexWhere((item) => item.id == recipe.id);
+    if (recipeIndex >= 0) {
+      recipes[recipeIndex] = recipe;
+    }
+
+    await _saveCustomRecipes();
+    notifyListeners();
+  }
+
+  Future<void> deleteCustomRecipe(String id) async {
+    customRecipes.removeWhere((item) => item.id == id);
+    recipes.removeWhere((item) => item.id == id);
+    await _saveCustomRecipes();
+    notifyListeners();
+  }
+
+  Future<Recipe> duplicateCustomRecipe(Recipe source) async {
+    final copy = Recipe(
+      id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
+      name: '${source.name} copy',
+      ingredients: List<String>.from(source.ingredients),
+      steps: source.steps
+          .map(
+            (step) => RecipeStep(
+              instruction: step.instruction,
+              seconds: step.seconds,
+            ),
+          )
+          .toList(),
+      servings: source.servings,
+      description: source.description,
+      category: source.category,
+      cuisine: source.cuisine,
+      difficulty: source.difficulty,
+      prepMinutes: source.prepMinutes,
+      equipment: List<String>.from(source.equipment),
+      temperatureCelsius: source.temperatureCelsius,
+      tags: <String>{
+        ...source.tags,
+        'Custom',
+      }.toList(),
+    );
+
+    await addCustomRecipe(copy);
+    return copy;
+  }
+
   Future<void> _saveCustomRecipes() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(

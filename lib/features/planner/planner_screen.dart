@@ -747,3 +747,10 @@ String _fullDate(DateTime value) {
   ];
   return '${weekdays[value.weekday - 1]}, ${value.day}/${value.month}';
 }
+
+
+String _plannerRecipeLabel(dynamic state, Recipe recipe) {
+  return state.isCustomRecipe(recipe)
+      ? '${recipe.name} · My recipe'
+      : recipe.name;
+}

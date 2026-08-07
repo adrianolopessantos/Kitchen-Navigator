@@ -28,7 +28,12 @@ class _RecipesScreenState extends State<RecipesScreen> {
     }.toList();
 
     final visible = state.filteredRecipes.where((recipe) {
-      if (category != 'All' && recipe.category != category) {
+      if (category == 'My recipes' && !state.isCustomRecipe(recipe)) {
+        return false;
+      }
+      if (category != 'All' &&
+          category != 'My recipes' &&
+          recipe.category != category) {
         return false;
       }
       if (quickOnly && recipe.totalMinutes > 30) {
@@ -49,20 +54,73 @@ class _RecipesScreenState extends State<RecipesScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Smart Recipes',
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: () => _showAddRecipe(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Add recipe'),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 390;
+
+              return Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.recipes.withValues(alpha: .13),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.menu_book_outlined,
+                      color: AppColors.recipes,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Recipes',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.headlineLarge,
+                        ),
+                        if (!compact)
+                          const Text(
+                            'Built-in and your own recipes, together.',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (compact)
+                    IconButton.filled(
+                      tooltip: 'Add recipe',
+                      onPressed: () => _showRecipeEditor(context),
+                      icon: const Icon(Icons.add),
+                    )
+                  else
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.recipes,
+                        minimumSize: const Size(0, 46),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                        ),
+                      ),
+                      onPressed: () => _showRecipeEditor(context),
+                      icon: const Icon(Icons.add, size: 19),
+                      label: const Text('Add'),
+                    ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           const Text(
@@ -97,7 +155,10 @@ class _RecipesScreenState extends State<RecipesScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilterChip(
                 selected: quickOnly,
@@ -106,7 +167,14 @@ class _RecipesScreenState extends State<RecipesScreen> {
                 avatar: const Icon(Icons.timer_outlined, size: 17),
                 label: const Text('30 min or less'),
               ),
-              const Spacer(),
+              FilterChip(
+                selected: category == 'My recipes',
+                onSelected: (value) => setState(
+                  () => category = value ? 'My recipes' : 'All',
+                ),
+                avatar: const Icon(Icons.person_outline, size: 17),
+                label: const Text('My recipes'),
+              ),
               DropdownButton<String>(
                 value: sort,
                 items: const [
@@ -149,213 +217,386 @@ class _RecipesScreenState extends State<RecipesScreen> {
             )
           else
             ...visible.map(
-              (recipe) => _RecipeCard(recipe: recipe),
+              (recipe) => _RecipeCard(
+                recipe: recipe,
+                isCustom: state.isCustomRecipe(recipe),
+                onEdit: state.isCustomRecipe(recipe)
+                    ? () => _showRecipeEditor(
+                          context,
+                          existing: recipe,
+                        )
+                    : null,
+                onDuplicate: state.isCustomRecipe(recipe)
+                    ? () => _duplicateRecipe(context, recipe)
+                    : null,
+                onDelete: state.isCustomRecipe(recipe)
+                    ? () => _deleteRecipe(context, recipe)
+                    : null,
+              ),
             ),
         ],
       ),
     );
   }
 
-  Future<void> _showAddRecipe(BuildContext context) async {
+
+  Future<void> _showRecipeEditor(
+    BuildContext context, {
+    Recipe? existing,
+  }) async {
     final state = AppScope.of(context);
-    final nameController = TextEditingController();
+    final nameController =
+        TextEditingController(text: existing?.name ?? '');
     final categoryController =
-        TextEditingController(text: 'Everyday');
+        TextEditingController(text: existing?.category ?? 'Everyday');
     final cuisineController =
-        TextEditingController(text: 'International');
-    final servingsController = TextEditingController(text: '2');
-    final prepController = TextEditingController(text: '10');
-    final ingredientsController = TextEditingController();
-    final stepsController = TextEditingController();
-    final notesController = TextEditingController();
+        TextEditingController(text: existing?.cuisine ?? 'International');
+    final servingsController = TextEditingController(
+      text: (existing?.servings ?? 2).toString(),
+    );
+    final prepController = TextEditingController(
+      text: (existing?.prepMinutes ?? 10).toString(),
+    );
+    final ingredientsController = TextEditingController(
+      text: existing?.ingredients.join('\n') ?? '',
+    );
+    final stepsController = TextEditingController(
+      text: existing?.steps
+              .map((step) {
+                if (step.seconds > 0) {
+                  return '${step.instruction} | ${step.seconds ~/ 60} min';
+                }
+                return step.instruction;
+              })
+              .join('\n') ??
+          '',
+    );
+    final notesController =
+        TextEditingController(text: existing?.description ?? '');
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: AppColors.surface,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          18,
-          16,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + 18,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add your recipe',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Create it your way. One ingredient and one step per line.',
-                style: TextStyle(color: AppColors.muted),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration:
-                    const InputDecoration(labelText: 'Recipe name'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: categoryController,
-                      decoration:
-                          const InputDecoration(labelText: 'Category'),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * .90,
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          existing == null
+                              ? 'Add your recipe'
+                              : 'Edit your recipe',
+                          style:
+                              Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'One ingredient and one step per line. For a timed step, add “| 10 min” after the instruction.',
+                          style: TextStyle(color: AppColors.muted),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: nameController,
+                          autofocus: existing == null,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Recipe name',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: categoryController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Category',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: cuisineController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Cuisine',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: servingsController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Servings',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: prepController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Prep minutes',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: ingredientsController,
+                          minLines: 4,
+                          maxLines: 9,
+                          textCapitalization:
+                              TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            labelText: 'Ingredients',
+                            hintText:
+                                '500 g pasta\n2 tomatoes\n1 tbsp olive oil',
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: stepsController,
+                          minLines: 5,
+                          maxLines: 11,
+                          textCapitalization:
+                              TextCapitalization.sentences,
+                          decoration: const InputDecoration(
+                            labelText: 'Steps',
+                            hintText:
+                                'Boil pasta | 10 min\nPrepare sauce | 5 min\nCombine and serve',
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: notesController,
+                          minLines: 2,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes (optional)',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: cuisineController,
-                      decoration:
-                          const InputDecoration(labelText: 'Cuisine'),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border(
+                      top: BorderSide(color: AppColors.border),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: servingsController,
-                      keyboardType: TextInputType.number,
-                      decoration:
-                          const InputDecoration(labelText: 'Servings'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: prepController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Prep minutes',
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.recipes,
+                      ),
+                      onPressed: () async {
+                        final name = nameController.text.trim();
+                        final ingredients = ingredientsController.text
+                            .split('\n')
+                            .map((value) => value.trim())
+                            .where((value) => value.isNotEmpty)
+                            .toList();
+
+                        final steps = stepsController.text
+                            .split('\n')
+                            .map((value) => value.trim())
+                            .where((value) => value.isNotEmpty)
+                            .map(_parseCustomStep)
+                            .toList();
+
+                        if (name.isEmpty ||
+                            ingredients.isEmpty ||
+                            steps.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Add a name, at least one ingredient and one step.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final recipe = Recipe(
+                          id: existing?.id ??
+                              'custom-${DateTime.now().microsecondsSinceEpoch}',
+                          name: name,
+                          ingredients: ingredients,
+                          steps: steps,
+                          servings:
+                              int.tryParse(servingsController.text) ?? 2,
+                          description: notesController.text.trim(),
+                          category:
+                              categoryController.text.trim().isEmpty
+                                  ? 'Everyday'
+                                  : categoryController.text.trim(),
+                          cuisine:
+                              cuisineController.text.trim().isEmpty
+                                  ? 'International'
+                                  : cuisineController.text.trim(),
+                          difficulty:
+                              existing?.difficulty ?? 'Easy',
+                          prepMinutes:
+                              int.tryParse(prepController.text) ?? 10,
+                          equipment:
+                              existing?.equipment ?? const [],
+                          temperatureCelsius:
+                              existing?.temperatureCelsius,
+                          tags: <String>{
+                            ...?existing?.tags,
+                            'Custom',
+                          }.toList(),
+                        );
+
+                        if (existing == null) {
+                          await state.addCustomRecipe(recipe);
+                        } else {
+                          await state.updateCustomRecipe(recipe);
+                        }
+
+                        if (!mounted ||
+                            !sheetContext.mounted) {
+                          return;
+                        }
+                        Navigator.pop(sheetContext);
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(
+                        existing == null
+                            ? 'Save recipe'
+                            : 'Save changes',
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ingredientsController,
-                minLines: 4,
-                maxLines: 8,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Ingredients',
-                  hintText: '500 g pasta\n2 tomatoes\n1 tbsp olive oil',
-                  alignLabelWithHint: true,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: stepsController,
-                minLines: 5,
-                maxLines: 10,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Steps',
-                  hintText:
-                      'Boil the pasta\nPrepare the sauce\nCombine and serve',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                ),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    final ingredients = ingredientsController.text
-                        .split('\n')
-                        .map((value) => value.trim())
-                        .where((value) => value.isNotEmpty)
-                        .toList();
-                    final stepLines = stepsController.text
-                        .split('\n')
-                        .map((value) => value.trim())
-                        .where((value) => value.isNotEmpty)
-                        .toList();
-
-                    if (name.isEmpty ||
-                        ingredients.isEmpty ||
-                        stepLines.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Add a name, at least one ingredient and one step.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final recipe = Recipe(
-                      id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
-                      name: name,
-                      ingredients: ingredients,
-                      steps: stepLines
-                          .map(
-                            (value) => RecipeStep(
-                              instruction: value,
-                            ),
-                          )
-                          .toList(),
-                      servings:
-                          int.tryParse(servingsController.text) ?? 2,
-                      description: notesController.text.trim(),
-                      category: categoryController.text.trim().isEmpty
-                          ? 'Everyday'
-                          : categoryController.text.trim(),
-                      cuisine: cuisineController.text.trim().isEmpty
-                          ? 'International'
-                          : cuisineController.text.trim(),
-                      prepMinutes:
-                          int.tryParse(prepController.text) ?? 10,
-                      tags: const ['Custom'],
-                    );
-
-                    await state.addCustomRecipe(recipe);
-                    if (!mounted || !sheetContext.mounted) return;
-                    Navigator.pop(sheetContext);
-                    setState(() {});
-                  },
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('Save recipe'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  RecipeStep _parseCustomStep(String value) {
+    final parts = value.split('|');
+    final instruction = parts.first.trim();
+    var seconds = 0;
+
+    if (parts.length > 1) {
+      final timing = parts[1].trim().toLowerCase();
+      final match = RegExp(r'(\d+)').firstMatch(timing);
+      final amount = int.tryParse(match?.group(1) ?? '') ?? 0;
+
+      if (timing.contains('sec')) {
+        seconds = amount;
+      } else if (timing.contains('hour')) {
+        seconds = amount * 3600;
+      } else {
+        seconds = amount * 60;
+      }
+    }
+
+    return RecipeStep(
+      instruction: instruction,
+      seconds: seconds,
+    );
+  }
+
+  Future<void> _duplicateRecipe(
+    BuildContext context,
+    Recipe recipe,
+  ) async {
+    final state = AppScope.of(context);
+    final copy = await state.duplicateCustomRecipe(recipe);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${copy.name} created.'),
+      ),
+    );
+    setState(() {});
+  }
+
+  Future<void> _deleteRecipe(
+    BuildContext context,
+    Recipe recipe,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete recipe?'),
+        content: Text(
+          'Delete “${recipe.name}”? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await AppScope.of(context).deleteCustomRecipe(recipe.id);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+
 }
 
 class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({required this.recipe});
+  const _RecipeCard({
+    required this.recipe,
+    required this.isCustom,
+    this.onEdit,
+    this.onDuplicate,
+    this.onDelete,
+  });
 
   final Recipe recipe;
+  final bool isCustom;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDuplicate;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -415,6 +656,8 @@ class _RecipeCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
+                        if (isCustom)
+                          const _RecipeBadge('MY RECIPE'),
                         _RecipeBadge(recipe.difficulty),
                         if (recipe.equipment.isNotEmpty)
                           _RecipeBadge(recipe.equipment.first),
@@ -425,7 +668,44 @@ class _RecipeCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              if (isCustom)
+                PopupMenuButton<String>(
+                  tooltip: 'Manage custom recipe',
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: AppColors.recipes,
+                  ),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit?.call();
+                    if (value == 'duplicate') onDuplicate?.call();
+                    if (value == 'delete') onDelete?.call();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Edit'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'duplicate',
+                      child: ListTile(
+                        leading: Icon(Icons.copy_outlined),
+                        title: Text('Duplicate'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                const Icon(Icons.chevron_right),
             ],
           ),
         ),

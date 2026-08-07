@@ -1,30 +1,37 @@
-Kitchen Navigator v12 Alpha 5 - Today Overflow Fix
+Kitchen Navigator v12 Alpha 6 - Horizontal Overflow Fix
 
-Fix:
-- Reapplies the proven Alpha 3 Today layout fix.
-- Kitchen Overview cards receive slightly more vertical space.
-- Quick Action vertical padding is slightly reduced.
-- Resolves the small RenderFlex bottom overflow (~4.4 px).
+Fixes the RenderFlex overflow on narrow Android screens.
 
-Why it returned:
-Alpha 5 was created from the earlier Alpha 3 Dashboard source,
-before the dedicated overflow fix had been applied.
+Recipes:
+- Header is now responsive using LayoutBuilder.
+- On narrower screens, Add Recipe becomes a compact + icon button.
+- Long header text ellipsizes safely.
+- Recipe filters now use Wrap instead of forcing everything into one Row.
+- 30 min / My recipes / sort control can flow to another line.
+
+Planner:
+- Custom-recipe labels are allowed to ellipsize safely.
+
+Resolves:
+- A RenderFlex overflowed by ~90 pixels on the right.
 
 Install:
-1. Extract this ZIP.
-2. Copy the lib folder into:
+1. Extract ZIP.
+2. Copy lib and test into:
    C:\Projects\KitchenNavigator
-3. Choose Replace all / Merge folders.
+3. Merge / Replace.
 4. Run:
    C:\src\flutter\bin\flutter.bat test
    C:\src\flutter\bin\flutter.bat run -d R5CY91DJ6EA
 
-Check Today:
-- Quick Actions
-- Shopping / Pantry / Budget / Nutrition cards
-- No yellow/black overflow warning
+Phone test:
+- Open Recipes.
+- Confirm no yellow/black right-overflow stripe.
+- Rotate / resize if possible.
+- Test My recipes, 30 min filter and sort.
+- Confirm Add Recipe remains accessible.
 
 After successful testing:
-   git add lib
-   git commit -m "Reapply Today overflow fix to Alpha 5"
+   git add lib test
+   git commit -m "Fix Alpha 6 recipe header overflow"
    git push
